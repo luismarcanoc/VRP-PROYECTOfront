@@ -1,0 +1,9 @@
+tipo,id_origen,nombre_origen,prioridad_origen,id_destino,nombre_destino,prioridad_destino,peso_ruta
+ruta,PLANTA,Planta Bello Campo,5,SUC01,Sucursal Centro,4,12
+ruta,PLANTA,Planta Bello Campo,5,SUC02,Sucursal Altamira,3,18
+ruta,PLANTA,Planta Bello Campo,5,SUC03,Sucursal Chacao,5,10
+ruta,SUC01,Sucursal Centro,4,SUC02,Sucursal Altamira,3,8
+ruta,SUC02,Sucursal Altamira,3,SUC03,Sucursal Chacao,5,6
+ruta,SUC03,Sucursal Chacao,5,SUC04,Sucursal La California,2,15
+ruta,SUC01,Sucursal Centro,4,SUC04,Sucursal La California,2,20
+ruta,SUC04,Sucursal La California,2,SUC05,Sucursal Petare,1,9

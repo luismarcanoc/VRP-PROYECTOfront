@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pan de Tata | Optimizacion de Rutas</title>
+    <link rel="icon" type="image/png" href="assets/logopandetata.png" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <div class="brand-corner">
+        <img class="brand-logo-large" src="assets/logopandetata.png" alt="Logo Pan de Tata" />
+    </div>
+
+    <main id="page-menu" class="app-page active">
+        <section class="menu-page">
+            <div class="menu-dashboard">
+                <article class="menu-welcome-card">
+                    <p class="menu-kicker">Planificacion de distribucion</p>
+                    <h1>Optimizacion de rutas para Pan de Tata</h1>
+                    <p>
+                        Administra sucursales, prioridades y conexiones del sistema de despacho de camiones
+                        desde una sola interfaz inspirada en el estilo actual del proyecto.
+                    </p>
+                    <div class="hero-metrics">
+                        <div class="metric-card">
+                            <strong id="metric-nodes">0</strong>
+                            <span>Sucursales</span>
+                        </div>
+                        <div class="metric-card">
+                            <strong id="metric-edges">0</strong>
+                            <span>Rutas</span>
+                        </div>
+                        <div class="metric-card">
+                            <strong id="metric-priority">0</strong>
+                            <span>Prioridad maxima</span>
+                        </div>
+                    </div>
+                </article>
+
+                <div class="menu-sections menu-sections--dual">
+                    <article class="menu-section">
+                        <div class="menu-section-badge">Modulo A</div>
+                        <h2>Visualizar grafo</h2>
+                        <p>
+                            Carga los datos del backend o del CSV de ejemplo y observa el mapa de conexiones
+                            entre planta y sucursales en una vista dedicada.
+                        </p>
+                        <div class="menu-actions">
+                            <button class="menu-primary-btn empa" type="button" data-go-page="graph">Abrir grafo</button>
+                        </div>
+                    </article>
+
+                    <article class="menu-section">
+                        <div class="menu-section-badge">Modulo B</div>
+                        <h2>Modificar datos</h2>
+                        <p>
+                            Cambia nombres, prioridades, pesos de rutas y agrega nuevos nodos o conexiones
+                            para preparar escenarios de optimizacion.
+                        </p>
+                        <div class="menu-actions">
+                            <button class="menu-primary-btn empa" type="button" data-go-page="edit">Editar datos</button>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <main id="page-graph" class="app-page app-inner-page">
+        <section class="page-shell">
+            <header class="section-hero">
+                <div>
+                    <p class="menu-kicker">Modulo A</p>
+                    <h2>Visualizar grafo</h2>
+                    <p>
+                        Esta vista muestra exclusivamente el grafo de distribucion. Los cambios realizados en el
+                        modulo de datos se reflejan aqui al instante.
+                    </p>
+                </div>
+                <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
+            </header>
+
+            <section class="graph-layout">
+                <article class="graph-card graph-card--canvas">
+                    <div class="graph-card-head">
+                        <h3>Red de rutas</h3>
+                        <button id="reload-sample" class="menu-secondary-btn" type="button">Recargar ejemplo</button>
+                    </div>
+                    <div id="graph-stage" class="graph-stage" aria-live="polite"></div>
+                </article>
+
+                <aside class="graph-card graph-card--summary">
+                    <h3>Resumen operativo</h3>
+                    <div class="summary-list">
+                        <div class="summary-row">
+                            <span>Nodo de salida</span>
+                            <strong id="summary-hub">-</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Ruta mas larga</span>
+                            <strong id="summary-longest">-</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Ruta mas corta</span>
+                            <strong id="summary-shortest">-</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Total de conexiones</span>
+                            <strong id="summary-total">0</strong>
+                        </div>
+                    </div>
+                    <div class="legend-box">
+                        <h4>Lectura visual</h4>
+                        <p>El tamano del nodo crece con la prioridad. Las rutas mas pesadas usan trazos mas intensos.</p>
+                    </div>
+                </aside>
+            </section>
+        </section>
+    </main>
+
+    <main id="page-edit" class="app-page app-inner-page">
+        <section class="page-shell">
+            <header class="section-hero">
+                <div>
+                    <p class="menu-kicker">Modulo B</p>
+                    <h2>Modificar datos</h2>
+                    <p>
+                        Ajusta sucursales y rutas para simular prioridades, pesos y nuevas conexiones del sistema.
+                    </p>
+                </div>
+                <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
+            </header>
+
+            <section class="edit-layout">
+                <article class="edit-card">
+                    <div class="edit-card-head">
+                        <h3>Nodos o sucursales</h3>
+                        <span class="pill-count" id="nodes-count">0 nodos</span>
+                    </div>
+                    <form id="node-form" class="editor-form">
+                        <div class="compact-grid">
+                            <div class="field">
+                                <label for="node-id">Codigo</label>
+                                <input id="node-id" name="id" type="text" maxlength="12" placeholder="SUC06" required />
+                            </div>
+                            <div class="field">
+                                <label for="node-name">Nombre</label>
+                                <input id="node-name" name="name" type="text" placeholder="Sucursal Nueva" required />
+                            </div>
+                            <div class="field">
+                                <label for="node-priority">Prioridad</label>
+                                <input id="node-priority" name="priority" type="number" min="1" max="10" value="3" required />
+                            </div>
+                            <div class="field field-action">
+                                <button type="submit">Guardar nodo</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="table-shell">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Codigo</th>
+                                    <th>Nombre</th>
+                                    <th>Prioridad</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nodes-table-body"></tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <article class="edit-card">
+                    <div class="edit-card-head">
+                        <h3>Rutas y pesos</h3>
+                        <span class="pill-count" id="edges-count">0 rutas</span>
+                    </div>
+                    <form id="edge-form" class="editor-form">
+                        <div class="compact-grid compact-grid--routes">
+                            <div class="field">
+                                <label for="edge-origin">Origen</label>
+                                <select id="edge-origin" name="origin" required></select>
+                            </div>
+                            <div class="field">
+                                <label for="edge-destination">Destino</label>
+                                <select id="edge-destination" name="destination" required></select>
+                            </div>
+                            <div class="field">
+                                <label for="edge-weight">Peso</label>
+                                <input id="edge-weight" name="weight" type="number" min="1" value="10" required />
+                            </div>
+                            <div class="field field-action">
+                                <button type="submit">Guardar ruta</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="table-shell">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Peso</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="edges-table-body"></tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <section class="status-strip">
+                <div class="status-card">
+                    <strong>Estado de edicion</strong>
+                    <span id="status-message">Datos cargados desde el ejemplo inicial.</span>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
