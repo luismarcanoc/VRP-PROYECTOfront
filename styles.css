@@ -358,6 +358,9 @@ button:focus-visible,
     padding: 14px;
     border-radius: 18px;
     border: 1px solid rgba(217, 200, 171, 0.95);
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
     background:
         linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,248,237,0.96) 100%),
         repeating-linear-gradient(
@@ -374,6 +377,10 @@ button:focus-visible,
             var(--pdt-grid) 28px,
             var(--pdt-grid) 29px
         );
+}
+
+.graph-stage.is-dragging {
+    cursor: grabbing;
 }
 
 .graph-stage svg {
@@ -402,16 +409,6 @@ button:focus-visible,
 
 .summary-row strong {
     color: var(--pdt-black);
-}
-
-.legend-box {
-    margin-top: 14px;
-    padding: 16px;
-}
-
-.legend-box h4 {
-    margin: 0 0 8px;
-    font-size: 1rem;
 }
 
 .edit-layout {

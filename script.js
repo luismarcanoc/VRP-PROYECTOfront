@@ -13,7 +13,19 @@ const state = {
     nodes: [],
     edges: [],
     selectedNodeId: "",
-    sourceMode: "csv"
+    sourceMode: "csv",
+    graphView: {
+        scale: 1,
+        minScale: 0.65,
+        maxScale: 2.4,
+        translateX: 0,
+        translateY: 0,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        startTranslateX: 0,
+        startTranslateY: 0
+    }
 };
 
 const refs = {
@@ -243,20 +255,21 @@ function renderGraph() {
 
     const positions = getNodePositions();
     const maxWeight = state.edges.reduce((max, edge) => Math.max(max, edge.weight), 1);
+    const minWeight = state.edges.reduce((min, edge) => Math.min(min, edge.weight), maxWeight);
 
     const edgesSvg = state.edges
         .map((edge) => {
             const origin = positions.get(edge.origin);
             const destination = positions.get(edge.destination);
             if (!origin || !destination) return "";
-            const strokeWidth = 2 + (edge.weight / maxWeight) * 5;
             const midX = (origin.x + destination.x) / 2;
             const midY = (origin.y + destination.y) / 2;
+            const edgeColor = getEdgeColor(edge.weight, minWeight, maxWeight);
 
             return `
                 <g>
                     <line x1="${origin.x}" y1="${origin.y}" x2="${destination.x}" y2="${destination.y}"
-                        stroke="rgba(192,110,50,0.72)" stroke-width="${strokeWidth}" stroke-linecap="round" />
+                        stroke="${edgeColor}" stroke-width="4" stroke-linecap="round" />
                     <text x="${midX}" y="${midY - 8}" fill="#5f4634" font-size="13" font-weight="700" text-anchor="middle">
                         ${edge.weight}
                     </text>
@@ -289,10 +302,106 @@ function renderGraph() {
 
     refs.graphStage.innerHTML = `
         <svg viewBox="0 0 840 520" role="img" aria-label="Grafo de rutas de distribucion">
-            ${edgesSvg}
-            ${nodesSvg}
+            <g id="graph-viewport" transform="translate(${state.graphView.translateX} ${state.graphView.translateY}) scale(${state.graphView.scale})">
+                ${edgesSvg}
+                ${nodesSvg}
+            </g>
         </svg>
     `;
+
+    syncGraphViewportTransform();
+}
+
+function getEdgeColor(weight, minWeight, maxWeight) {
+    if (maxWeight === minWeight) {
+        return "rgb(180, 90, 80)";
+    }
+
+    const ratio = (weight - minWeight) / (maxWeight - minWeight);
+    const hue = 220 - (220 * ratio);
+    return `hsl(${hue}, 75%, 50%)`;
+}
+
+function syncGraphViewportTransform() {
+    const viewport = document.getElementById("graph-viewport");
+    if (!viewport) return;
+    viewport.setAttribute(
+        "transform",
+        `translate(${state.graphView.translateX} ${state.graphView.translateY}) scale(${state.graphView.scale})`
+    );
+}
+
+function clampGraphPan() {
+    const scale = state.graphView.scale;
+    const maxX = Math.max(0, (840 * (scale - 1)) / 2);
+    const maxY = Math.max(0, (520 * (scale - 1)) / 2);
+    state.graphView.translateX = Math.min(maxX, Math.max(-maxX, state.graphView.translateX));
+    state.graphView.translateY = Math.min(maxY, Math.max(-maxY, state.graphView.translateY));
+}
+
+function setGraphScale(nextScale, anchorX = 420, anchorY = 260) {
+    const previousScale = state.graphView.scale;
+    const clampedScale = Math.min(state.graphView.maxScale, Math.max(state.graphView.minScale, nextScale));
+    if (clampedScale === previousScale) return;
+
+    const worldX = (anchorX - state.graphView.translateX) / previousScale;
+    const worldY = (anchorY - state.graphView.translateY) / previousScale;
+    state.graphView.scale = clampedScale;
+    state.graphView.translateX = anchorX - worldX * clampedScale;
+    state.graphView.translateY = anchorY - worldY * clampedScale;
+    clampGraphPan();
+    syncGraphViewportTransform();
+}
+
+function bindGraphInteractions() {
+    refs.graphStage.addEventListener("wheel", (event) => {
+        const svg = refs.graphStage.querySelector("svg");
+        if (!svg) return;
+        event.preventDefault();
+
+        const rect = svg.getBoundingClientRect();
+        const viewX = ((event.clientX - rect.left) / rect.width) * 840;
+        const viewY = ((event.clientY - rect.top) / rect.height) * 520;
+        const factor = event.deltaY < 0 ? 1.12 : 0.9;
+        setGraphScale(state.graphView.scale * factor, viewX, viewY);
+    }, { passive: false });
+
+    refs.graphStage.addEventListener("pointerdown", (event) => {
+        if (!refs.graphStage.querySelector("svg")) return;
+        state.graphView.isDragging = true;
+        state.graphView.dragStartX = event.clientX;
+        state.graphView.dragStartY = event.clientY;
+        state.graphView.startTranslateX = state.graphView.translateX;
+        state.graphView.startTranslateY = state.graphView.translateY;
+        refs.graphStage.classList.add("is-dragging");
+        refs.graphStage.setPointerCapture(event.pointerId);
+    });
+
+    refs.graphStage.addEventListener("pointermove", (event) => {
+        if (!state.graphView.isDragging) return;
+        const svg = refs.graphStage.querySelector("svg");
+        if (!svg) return;
+
+        const rect = svg.getBoundingClientRect();
+        const deltaX = ((event.clientX - state.graphView.dragStartX) / rect.width) * 840;
+        const deltaY = ((event.clientY - state.graphView.dragStartY) / rect.height) * 520;
+        state.graphView.translateX = state.graphView.startTranslateX + deltaX;
+        state.graphView.translateY = state.graphView.startTranslateY + deltaY;
+        clampGraphPan();
+        syncGraphViewportTransform();
+    });
+
+    const stopDragging = (event) => {
+        if (event && refs.graphStage.hasPointerCapture(event.pointerId)) {
+            refs.graphStage.releasePointerCapture(event.pointerId);
+        }
+        state.graphView.isDragging = false;
+        refs.graphStage.classList.remove("is-dragging");
+    };
+
+    refs.graphStage.addEventListener("pointerup", stopDragging);
+    refs.graphStage.addEventListener("pointercancel", stopDragging);
+    refs.graphStage.addEventListener("pointerleave", stopDragging);
 }
 
 function renderSummary() {
@@ -470,6 +579,7 @@ function bindEvents() {
 
 function init() {
     bindEvents();
+    bindGraphInteractions();
     loadInitialData();
 }
 
