@@ -31,8 +31,8 @@ const state = {
 const GRAPH_BOUNDS = {
     width: 840,
     height: 520,
-    paddingX: 110,
-    paddingY: 110
+    paddingX: 180,
+    paddingY: 180
 };
 
 const refs = {
