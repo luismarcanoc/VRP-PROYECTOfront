@@ -28,6 +28,13 @@ const state = {
     }
 };
 
+const GRAPH_BOUNDS = {
+    width: 840,
+    height: 520,
+    paddingX: 110,
+    paddingY: 110
+};
+
 const refs = {
     pages: document.querySelectorAll(".app-page"),
     graphStage: document.getElementById("graph-stage"),
@@ -225,8 +232,8 @@ function renderEdgesTable() {
 }
 
 function getNodePositions() {
-    const centerX = 420;
-    const centerY = 260;
+    const centerX = GRAPH_BOUNDS.width / 2;
+    const centerY = GRAPH_BOUNDS.height / 2;
     const radius = 170;
     const total = state.nodes.length || 1;
     const positions = new Map();
@@ -301,7 +308,7 @@ function renderGraph() {
         .join("");
 
     refs.graphStage.innerHTML = `
-        <svg viewBox="0 0 840 520" role="img" aria-label="Grafo de rutas de distribucion">
+        <svg viewBox="${-GRAPH_BOUNDS.paddingX} ${-GRAPH_BOUNDS.paddingY} ${GRAPH_BOUNDS.width + (GRAPH_BOUNDS.paddingX * 2)} ${GRAPH_BOUNDS.height + (GRAPH_BOUNDS.paddingY * 2)}" role="img" aria-label="Grafo de rutas de distribucion" preserveAspectRatio="xMidYMid meet">
             <g id="graph-viewport" transform="translate(${state.graphView.translateX} ${state.graphView.translateY}) scale(${state.graphView.scale})">
                 ${edgesSvg}
                 ${nodesSvg}
@@ -333,13 +340,13 @@ function syncGraphViewportTransform() {
 
 function clampGraphPan() {
     const scale = state.graphView.scale;
-    const maxX = Math.max(0, (840 * (scale - 1)) / 2);
-    const maxY = Math.max(0, (520 * (scale - 1)) / 2);
+    const maxX = Math.max(0, (GRAPH_BOUNDS.width * (scale - 1)) / 2);
+    const maxY = Math.max(0, (GRAPH_BOUNDS.height * (scale - 1)) / 2);
     state.graphView.translateX = Math.min(maxX, Math.max(-maxX, state.graphView.translateX));
     state.graphView.translateY = Math.min(maxY, Math.max(-maxY, state.graphView.translateY));
 }
 
-function setGraphScale(nextScale, anchorX = 420, anchorY = 260) {
+function setGraphScale(nextScale, anchorX = GRAPH_BOUNDS.width / 2, anchorY = GRAPH_BOUNDS.height / 2) {
     const previousScale = state.graphView.scale;
     const clampedScale = Math.min(state.graphView.maxScale, Math.max(state.graphView.minScale, nextScale));
     if (clampedScale === previousScale) return;
@@ -360,8 +367,8 @@ function bindGraphInteractions() {
         event.preventDefault();
 
         const rect = svg.getBoundingClientRect();
-        const viewX = ((event.clientX - rect.left) / rect.width) * 840;
-        const viewY = ((event.clientY - rect.top) / rect.height) * 520;
+        const viewX = ((event.clientX - rect.left) / rect.width) * GRAPH_BOUNDS.width;
+        const viewY = ((event.clientY - rect.top) / rect.height) * GRAPH_BOUNDS.height;
         const factor = event.deltaY < 0 ? 1.12 : 0.9;
         setGraphScale(state.graphView.scale * factor, viewX, viewY);
     }, { passive: false });
@@ -383,8 +390,8 @@ function bindGraphInteractions() {
         if (!svg) return;
 
         const rect = svg.getBoundingClientRect();
-        const deltaX = ((event.clientX - state.graphView.dragStartX) / rect.width) * 840;
-        const deltaY = ((event.clientY - state.graphView.dragStartY) / rect.height) * 520;
+        const deltaX = ((event.clientX - state.graphView.dragStartX) / rect.width) * GRAPH_BOUNDS.width;
+        const deltaY = ((event.clientY - state.graphView.dragStartY) / rect.height) * GRAPH_BOUNDS.height;
         state.graphView.translateX = state.graphView.startTranslateX + deltaX;
         state.graphView.translateY = state.graphView.startTranslateY + deltaY;
         clampGraphPan();
