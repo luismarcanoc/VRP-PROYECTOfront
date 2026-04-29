@@ -1,4 +1,24 @@
-const API_BASE = window.VRP_API_BASE || "https://TU-BACKEND.onrender.com/api";
+const FALLBACK_API_BASE = "https://vrp-proyectoback.onrender.com/api";
+
+function resolveApiBase() {
+    const queryApi = new URLSearchParams(window.location.search).get("api");
+    const storedApi = window.localStorage.getItem("VRP_API_BASE") || "";
+    const explicitApi = String(window.VRP_API_BASE || "").trim();
+
+    const chosen = explicitApi || queryApi || storedApi;
+    if (chosen) {
+        window.localStorage.setItem("VRP_API_BASE", chosen);
+        return chosen;
+    }
+
+    if (window.location.hostname.includes("onrender.com")) {
+        return `${window.location.origin}/api`;
+    }
+
+    return FALLBACK_API_BASE;
+}
+
+const API_BASE = resolveApiBase();
 
 const state = {
     currentPage: "menu",
@@ -118,6 +138,10 @@ function refreshRouteSelects() {
 }
 
 async function loadInitialData() {
+    if (API_BASE.includes("TU-BACKEND")) {
+        setStatus("Configura la URL del backend: agrega ?api=https://tu-backend.onrender.com/api");
+        return;
+    }
     try {
         const payload = await apiGet("/routes");
         state.routes = payload.routes || [];
