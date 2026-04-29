@@ -43,8 +43,8 @@
                         <div class="menu-section-badge">Modulo A</div>
                         <h2>Visualizar grafo</h2>
                         <p>
-                            Carga los datos del backend o del CSV de ejemplo y observa el mapa de conexiones
-                            entre planta y sucursales en una vista dedicada.
+                            Consulta las rutas del backend, calcula distancias reales con Google Maps y observa
+                            la secuencia optimizada de despacho en una vista dedicada.
                         </p>
                         <div class="menu-actions">
                             <button class="menu-primary-btn empa" type="button" data-go-page="graph">Abrir grafo</button>
@@ -85,7 +85,20 @@
                 <article class="graph-card graph-card--canvas">
                     <div class="graph-card-head">
                         <h3>Red de rutas</h3>
-                        <button id="reload-sample" class="menu-secondary-btn" type="button">Recargar ejemplo</button>
+                        <button id="reload-backend" class="menu-secondary-btn" type="button">Recargar backend</button>
+                    </div>
+                    <div class="compact-grid compact-grid--routes">
+                        <div class="field">
+                            <label for="graph-route-select">Ruta</label>
+                            <select id="graph-route-select"></select>
+                        </div>
+                        <div class="field">
+                            <label for="graph-origin-input">Origen de distribucion</label>
+                            <input id="graph-origin-input" type="text" placeholder="Planta Bello Campo, Caracas, Venezuela" />
+                        </div>
+                        <div class="field field-action">
+                            <button id="optimize-route-btn" type="button">Optimizar ruta</button>
+                        </div>
                     </div>
                     <div id="graph-stage" class="graph-stage" aria-live="polite"></div>
                 </article>
@@ -218,6 +231,94 @@
             </section>
         </section>
     </main>
+
+    <main id="page-adjust" class="app-page app-inner-page">
+        <section class="page-shell">
+            <header class="section-hero">
+                <div>
+                    <p class="menu-kicker">Modulo C</p>
+                    <h2>Ajustar datos</h2>
+                    <p>Corrige clientes con informacion incompleta y edita clientes por ruta.</p>
+                </div>
+                <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
+            </header>
+
+            <section class="edit-layout">
+                <article class="edit-card">
+                    <div class="edit-card-head">
+                        <h3>Modo de ajuste</h3>
+                    </div>
+                    <div class="table-actions">
+                        <button id="mode-errors-btn" type="button">Arreglo de errores</button>
+                        <button id="mode-routes-btn" type="button">Editar datos</button>
+                    </div>
+                    <p id="adjust-mode-description" class="menu-kicker">Selecciona un modo para empezar.</p>
+                </article>
+
+                <article class="edit-card">
+                    <div class="edit-card-head">
+                        <h3>Clientes por ruta</h3>
+                    </div>
+                    <div class="field">
+                        <label for="adjust-route-select">Selecciona una ruta</label>
+                        <select id="adjust-route-select"></select>
+                    </div>
+                    <div class="table-shell">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Nombre</th>
+                                    <th>Direccion</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adjust-route-table-body">
+                                <tr><td colspan="4">Selecciona una ruta para mostrar clientes.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <section class="status-strip">
+                <article class="edit-card">
+                    <div class="edit-card-head">
+                        <h3>Formulario de cliente</h3>
+                    </div>
+                    <form id="adjust-client-form" class="editor-form">
+                        <div class="compact-grid">
+                            <div class="field">
+                                <label for="adjust-client-id">Cliente</label>
+                                <input id="adjust-client-id" type="text" readonly />
+                            </div>
+                            <div class="field">
+                                <label for="adjust-client-name">Nombre</label>
+                                <input id="adjust-client-name" type="text" required />
+                            </div>
+                            <div class="field">
+                                <label for="adjust-client-address">Direccion</label>
+                                <input id="adjust-client-address" type="text" required />
+                            </div>
+                            <div class="field">
+                                <label for="adjust-client-route">Ruta</label>
+                                <input id="adjust-client-route" type="text" required />
+                            </div>
+                            <div class="field">
+                                <label for="adjust-client-transport">Transporte</label>
+                                <input id="adjust-client-transport" type="text" />
+                            </div>
+                            <div class="field field-action">
+                                <button type="submit">Guardar cambios</button>
+                            </div>
+                        </div>
+                    </form>
+                </article>
+            </section>
+        </section>
+    </main>
+
+    <button class="floating-adjust-btn" type="button" data-go-page="adjust">Ajustar datos</button>
 
     <script src="script.js"></script>
 </body>

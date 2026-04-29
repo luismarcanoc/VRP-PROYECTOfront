@@ -1,19 +1,15 @@
-const CSV_FALLBACK = `tipo,id_origen,nombre_origen,prioridad_origen,id_destino,nombre_destino,prioridad_destino,peso_ruta
-ruta,PLANTA,Planta Bello Campo,5,SUC01,Sucursal Centro,4,12
-ruta,PLANTA,Planta Bello Campo,5,SUC02,Sucursal Altamira,3,18
-ruta,PLANTA,Planta Bello Campo,5,SUC03,Sucursal Chacao,5,10
-ruta,SUC01,Sucursal Centro,4,SUC02,Sucursal Altamira,3,8
-ruta,SUC02,Sucursal Altamira,3,SUC03,Sucursal Chacao,5,6
-ruta,SUC03,Sucursal Chacao,5,SUC04,Sucursal La California,2,15
-ruta,SUC01,Sucursal Centro,4,SUC04,Sucursal La California,2,20
-ruta,SUC04,Sucursal La California,2,SUC05,Sucursal Petare,1,9`;
+const API_BASE = window.VRP_API_BASE || "https://TU-BACKEND.onrender.com/api";
 
 const state = {
     currentPage: "menu",
     nodes: [],
     edges: [],
     selectedNodeId: "",
-    sourceMode: "csv",
+    sourceMode: "backend",
+    routes: [],
+    adjustMode: "none",
+    selectedClientKey: "",
+    clientsInAdjustTable: [],
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -38,7 +34,10 @@ const GRAPH_BOUNDS = {
 const refs = {
     pages: document.querySelectorAll(".app-page"),
     graphStage: document.getElementById("graph-stage"),
-    reloadSample: document.getElementById("reload-sample"),
+    reloadBackend: document.getElementById("reload-backend"),
+    graphRouteSelect: document.getElementById("graph-route-select"),
+    graphOriginInput: document.getElementById("graph-origin-input"),
+    optimizeRouteBtn: document.getElementById("optimize-route-btn"),
     nodeForm: document.getElementById("node-form"),
     edgeForm: document.getElementById("edge-form"),
     nodeId: document.getElementById("node-id"),
@@ -58,7 +57,18 @@ const refs = {
     summaryHub: document.getElementById("summary-hub"),
     summaryLongest: document.getElementById("summary-longest"),
     summaryShortest: document.getElementById("summary-shortest"),
-    summaryTotal: document.getElementById("summary-total")
+    summaryTotal: document.getElementById("summary-total"),
+    adjustModeDescription: document.getElementById("adjust-mode-description"),
+    modeErrorsBtn: document.getElementById("mode-errors-btn"),
+    modeRoutesBtn: document.getElementById("mode-routes-btn"),
+    adjustRouteSelect: document.getElementById("adjust-route-select"),
+    adjustRouteTableBody: document.getElementById("adjust-route-table-body"),
+    adjustClientForm: document.getElementById("adjust-client-form"),
+    adjustClientId: document.getElementById("adjust-client-id"),
+    adjustClientName: document.getElementById("adjust-client-name"),
+    adjustClientAddress: document.getElementById("adjust-client-address"),
+    adjustClientRoute: document.getElementById("adjust-client-route"),
+    adjustClientTransport: document.getElementById("adjust-client-transport")
 };
 
 function setStatus(message) {
@@ -77,80 +87,96 @@ function toNumber(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function parseCsv(csvText) {
-    const lines = String(csvText || "")
-        .trim()
-        .split(/\r?\n/)
-        .filter(Boolean);
+async function apiGet(pathname) {
+    const response = await fetch(`${API_BASE}${pathname}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
 
-    if (lines.length <= 1) {
-        return { nodes: [], edges: [] };
-    }
-
-    const rows = lines.slice(1).map((line) => line.split(","));
-    const nodesMap = new Map();
-    const edges = [];
-
-    rows.forEach((parts) => {
-        const originId = normalizeId(parts[1]);
-        const originName = String(parts[2] || "").trim();
-        const originPriority = Math.max(1, toNumber(parts[3], 1));
-        const destinationId = normalizeId(parts[4]);
-        const destinationName = String(parts[5] || "").trim();
-        const destinationPriority = Math.max(1, toNumber(parts[6], 1));
-        const weight = Math.max(1, toNumber(parts[7], 1));
-
-        if (originId) {
-            nodesMap.set(originId, {
-                id: originId,
-                name: originName || originId,
-                priority: originPriority
-            });
-        }
-
-        if (destinationId) {
-            nodesMap.set(destinationId, {
-                id: destinationId,
-                name: destinationName || destinationId,
-                priority: destinationPriority
-            });
-        }
-
-        if (originId && destinationId) {
-            edges.push({
-                id: `${originId}__${destinationId}`,
-                origin: originId,
-                destination: destinationId,
-                weight
-            });
-        }
+async function apiSend(pathname, options) {
+    const response = await fetch(`${API_BASE}${pathname}`, {
+        headers: { "Content-Type": "application/json" },
+        ...options
     });
+    if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+            const payload = await response.json();
+            message = payload.error || message;
+        } catch (_) {}
+        throw new Error(message);
+    }
+    return response.json();
+}
 
-    return {
-        nodes: Array.from(nodesMap.values()),
-        edges
-    };
+function refreshRouteSelects() {
+    const options = state.routes
+        .map((item) => `<option value="${item.route}">${item.route} (${item.totalClients})</option>`)
+        .join("");
+    refs.graphRouteSelect.innerHTML = `<option value="">Selecciona ruta</option>${options}`;
+    refs.adjustRouteSelect.innerHTML = `<option value="">Selecciona ruta</option>${options}`;
 }
 
 async function loadInitialData() {
     try {
-        const response = await fetch("data/rutas_ejemplo.csv", { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const csvText = await response.text();
-        const parsed = parseCsv(csvText);
-        state.nodes = parsed.nodes;
-        state.edges = parsed.edges;
-        state.sourceMode = "csv";
-        setStatus("Datos cargados desde data/rutas_ejemplo.csv.");
-    } catch (_) {
-        const parsed = parseCsv(CSV_FALLBACK);
-        state.nodes = parsed.nodes;
-        state.edges = parsed.edges;
-        state.sourceMode = "fallback";
-        setStatus("Datos cargados desde el respaldo interno. Si sirves el proyecto por HTTP tomara el CSV.");
+        const payload = await apiGet("/routes");
+        state.routes = payload.routes || [];
+        refreshRouteSelects();
+        state.nodes = [];
+        state.edges = [];
+        state.sourceMode = "backend";
+        setStatus("Rutas cargadas desde backend. Selecciona una ruta y presiona Optimizar.");
+    } catch (error) {
+        setStatus(`No se pudo conectar al backend: ${error.message}`);
     }
 
     renderAll();
+}
+
+function applyOptimizedResult(result) {
+    const nodes = [{ id: "ORIGEN", name: "Centro distribucion", priority: 5 }];
+    const edges = [];
+    let previousId = "ORIGEN";
+
+    result.sequence.forEach((client, index) => {
+        const nodeId = `C${String(index + 1).padStart(3, "0")}`;
+        nodes.push({
+            id: nodeId,
+            name: client.name || client.clientId,
+            priority: 3
+        });
+        edges.push({
+            id: `${previousId}__${nodeId}`,
+            origin: previousId,
+            destination: nodeId,
+            weight: Math.max(1, Math.round((client.legDistanceMeters || 0) / 1000))
+        });
+        previousId = nodeId;
+    });
+
+    state.nodes = nodes;
+    state.edges = edges;
+    renderAll();
+}
+
+async function optimizeCurrentRoute() {
+    const route = refs.graphRouteSelect.value;
+    const origin = String(refs.graphOriginInput.value || "").trim();
+    if (!route) {
+        setStatus("Selecciona una ruta para optimizar.");
+        return;
+    }
+
+    try {
+        const payload = await apiSend("/optimize-route", {
+            method: "POST",
+            body: JSON.stringify({ route, origin })
+        });
+        applyOptimizedResult(payload.optimized);
+        setStatus(`Ruta ${route} optimizada con distancia total aprox ${payload.optimized.totalDistanceKm} km.`);
+    } catch (error) {
+        setStatus(`Error al optimizar: ${error.message}`);
+    }
 }
 
 function getNodeById(nodeId) {
@@ -183,6 +209,93 @@ function renderSelectOptions() {
 
     refs.edgeOrigin.innerHTML = `<option value="">Selecciona</option>${options}`;
     refs.edgeDestination.innerHTML = `<option value="">Selecciona</option>${options}`;
+}
+
+function renderAdjustTable() {
+    if (!state.clientsInAdjustTable.length) {
+        refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">Sin clientes para mostrar.</td></tr>`;
+        return;
+    }
+
+    refs.adjustRouteTableBody.innerHTML = state.clientsInAdjustTable
+        .map((client) => `
+            <tr>
+                <td>${client.clientId}</td>
+                <td>${client.name || "-"}</td>
+                <td>${client.address || "-"}</td>
+                <td>
+                    <div class="table-actions">
+                        <button type="button" data-edit-client="${encodeURIComponent(client.key)}">Editar</button>
+                    </div>
+                </td>
+            </tr>
+        `)
+        .join("");
+}
+
+async function setAdjustMode(mode) {
+    state.adjustMode = mode;
+    if (mode === "errors") {
+        refs.adjustModeDescription.textContent = "Arreglo de errores: clientes con datos incompletos o revisar manualmente.";
+        const payload = await apiGet("/errors");
+        state.clientsInAdjustTable = payload.clients || [];
+        renderAdjustTable();
+        return;
+    }
+    refs.adjustModeDescription.textContent = "Editar datos: selecciona una ruta para ver solo sus clientes.";
+    state.clientsInAdjustTable = [];
+    renderAdjustTable();
+}
+
+async function loadClientsByAdjustRoute() {
+    const route = refs.adjustRouteSelect.value;
+    if (!route) {
+        state.clientsInAdjustTable = [];
+        renderAdjustTable();
+        return;
+    }
+    const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
+    state.clientsInAdjustTable = payload.clients || [];
+    renderAdjustTable();
+}
+
+function fillAdjustFormByKey(encodedKey) {
+    const key = decodeURIComponent(encodedKey);
+    const client = state.clientsInAdjustTable.find((item) => item.key === key);
+    if (!client) return;
+    state.selectedClientKey = key;
+    refs.adjustClientId.value = client.clientId;
+    refs.adjustClientName.value = client.name || "";
+    refs.adjustClientAddress.value = client.address || "";
+    refs.adjustClientRoute.value = client.route || "";
+    refs.adjustClientTransport.value = client.transport || "";
+}
+
+async function submitAdjustForm(event) {
+    event.preventDefault();
+    if (!state.selectedClientKey) {
+        setStatus("Selecciona un cliente desde la tabla para editar.");
+        return;
+    }
+    try {
+        await apiSend(`/clients/${encodeURIComponent(state.selectedClientKey)}`, {
+            method: "PUT",
+            body: JSON.stringify({
+                name: refs.adjustClientName.value,
+                address: refs.adjustClientAddress.value,
+                route: refs.adjustClientRoute.value,
+                transport: refs.adjustClientTransport.value
+            })
+        });
+        setStatus("Cliente actualizado correctamente.");
+        if (state.adjustMode === "errors") {
+            await setAdjustMode("errors");
+        } else {
+            await loadClientsByAdjustRoute();
+        }
+    } catch (error) {
+        setStatus(`No se pudo guardar: ${error.message}`);
+    }
 }
 
 function renderNodesTable() {
@@ -565,9 +678,14 @@ function bindEvents() {
         });
     });
 
-    refs.reloadSample.addEventListener("click", loadInitialData);
+    refs.reloadBackend.addEventListener("click", loadInitialData);
+    refs.optimizeRouteBtn.addEventListener("click", optimizeCurrentRoute);
     refs.nodeForm.addEventListener("submit", handleNodeSubmit);
     refs.edgeForm.addEventListener("submit", handleEdgeSubmit);
+    refs.modeErrorsBtn.addEventListener("click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
+    refs.modeRoutesBtn.addEventListener("click", () => setAdjustMode("routes").catch((e) => setStatus(e.message)));
+    refs.adjustRouteSelect.addEventListener("change", () => loadClientsByAdjustRoute().catch((e) => setStatus(e.message)));
+    refs.adjustClientForm.addEventListener("submit", submitAdjustForm);
 
     refs.nodesTableBody.addEventListener("click", (event) => {
         const target = event.target.closest("button");
@@ -581,6 +699,12 @@ function bindEvents() {
         if (!target) return;
         if (target.dataset.editEdge) fillEdgeForm(target.dataset.editEdge);
         if (target.dataset.deleteEdge) deleteEdge(target.dataset.deleteEdge);
+    });
+
+    refs.adjustRouteTableBody.addEventListener("click", (event) => {
+        const target = event.target.closest("button");
+        if (!target) return;
+        if (target.dataset.editClient) fillAdjustFormByKey(target.dataset.editClient);
     });
 }
 

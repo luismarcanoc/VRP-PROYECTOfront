@@ -1,20 +1,18 @@
 # VRP-PROYECTOfront
 
-Aplicacion frontend en HTML, CSS y JavaScript para visualizar y editar un grafo de distribucion de camiones de Pan de Tata.
+Frontend de visualizacion y ajuste de rutas.
 
-## Estructura
+## Configuracion de API
 
-- `index.html`: menu principal y modulos de la app.
-- `styles.css`: estilos base inspirados en `PRUEBA_EMPAQUETADOfrontend`.
-- `script.js`: navegacion, carga de CSV, visualizacion del grafo y formularios de edicion.
-- `data/rutas_ejemplo.csv`: datos de ejemplo para nodos, rutas, pesos y prioridades.
-- `assets/`: logo e imagen de apoyo visual.
+En `script.js` existe:
 
-## Modulos
+- `window.VRP_API_BASE` (si quieres inyectarlo desde HTML)
+- fallback: `https://TU-BACKEND.onrender.com/api`
 
-- `Visualizar grafo`: muestra el grafo de sucursales y rutas.
-- `Modificar datos`: permite editar nodos, prioridades y rutas, asi como agregar nuevos registros.
+Debes reemplazar `TU-BACKEND` por tu servicio real en Render.
 
-## Nota
+## Flujo
 
-Si abres `index.html` directamente desde el navegador, la app tiene un respaldo interno por si el `fetch` del CSV no se puede leer desde el sistema de archivos. Si la sirves por HTTP, cargara el CSV de `data/rutas_ejemplo.csv`.
+- Frontend consume endpoints del backend en Render.
+- Backend lee/escribe datos en Neon.
+- Optimizacion usa Google Maps desde backend.
