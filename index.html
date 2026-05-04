@@ -161,7 +161,10 @@
                             </select>
                         </div>
                     </div>
-                    <div class="pill-count" id="adjust-result-count">0 clientes</div>
+                    <div class="adjust-table-meta">
+                        <div class="pill-count" id="adjust-result-count">0 clientes</div>
+                        <button id="download-errors-xlsx-btn" type="button" class="menu-secondary-btn" style="display:none;">Descargar XLSX</button>
+                    </div>
                     <div class="table-shell adjust-table-shell">
                         <table class="data-table">
                             <thead>
@@ -229,5 +232,6 @@
     </div>
 
     <script src="script.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>

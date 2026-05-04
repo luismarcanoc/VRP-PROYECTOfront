@@ -594,6 +594,14 @@ button:focus-visible,
     padding-top: 12px;
 }
 
+.adjust-table-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
 .compact-grid--routes {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }

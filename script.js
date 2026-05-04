@@ -19,6 +19,7 @@ function resolveApiBase() {
 }
 
 const API_BASE = resolveApiBase();
+const ALL_ROUTES_VALUE = "__ALL_ROUTES__";
 
 const state = {
     currentPage: "menu",
@@ -101,6 +102,7 @@ const refs = {
     adjustTransportFilter: document.getElementById("adjust-transport-filter"),
     adjustResultCount: document.getElementById("adjust-result-count"),
     adjustShowMoreBtn: document.getElementById("adjust-show-more-btn"),
+    downloadErrorsXlsxBtn: document.getElementById("download-errors-xlsx-btn"),
     adjustClientForm: document.getElementById("adjust-client-form"),
     adjustClientId: document.getElementById("adjust-client-id"),
     adjustClientName: document.getElementById("adjust-client-name"),
@@ -259,6 +261,7 @@ function refreshRouteSelects() {
 
     refs.graphRouteSelect.add(new Option("Selecciona ruta", ""));
     refs.adjustRouteSelect.add(new Option("Selecciona ruta", ""));
+    refs.adjustRouteSelect.add(new Option("Todas las rutas", ALL_ROUTES_VALUE));
 
     state.routes.forEach((item) => {
         const label = `${item.route} (${item.totalClients})`;
@@ -376,6 +379,9 @@ function renderSelectOptions() {
 function renderAdjustTable() {
     applyAdjustFilters();
     renderAdjustTableHeader();
+    if (refs.downloadErrorsXlsxBtn) {
+        refs.downloadErrorsXlsxBtn.style.display = state.adjustMode === "errors" ? "inline-flex" : "none";
+    }
     if (!state.clientsInAdjustTable.length) {
         setAdjustTableMessage("Sin clientes para mostrar.");
         if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
@@ -435,8 +441,11 @@ function applyAdjustFilters() {
     const source = Array.isArray(state.adjustClientsRaw) ? state.adjustClientsRaw : [];
     const query = String(state.adjustFilters.query || "").trim().toLowerCase();
     const transport = String(state.adjustFilters.transport || "all").trim().toLowerCase();
+    const selectedRoute = String(refs.adjustRouteSelect?.value || "");
+    const enforceRoute = selectedRoute && selectedRoute !== ALL_ROUTES_VALUE;
 
     state.clientsInAdjustTable = source.filter((client) => {
+        if (enforceRoute && normalizeTextForMatch(client.route) !== normalizeTextForMatch(selectedRoute)) return false;
         const clientTransport = String(client.transport || "").trim().toLowerCase();
         if (transport !== "all" && clientTransport !== transport) return false;
         if (!query) return true;
@@ -509,12 +518,18 @@ async function loadClientsByAdjustRoute() {
         setStatus("Selecciona una ruta para mostrar clientes.");
         return;
     }
-    const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
-    let clients = extractClients(payload);
+    let clients = [];
+    if (route === ALL_ROUTES_VALUE) {
+        const payload = await apiGet("/clients");
+        clients = extractClients(payload);
+    } else {
+        const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
+        clients = extractClients(payload);
+    }
 
     // Fallback defensivo: si el filtro exacto en backend falla por formato de texto,
     // trae todo y filtra en frontend por ruta normalizada.
-    if (!clients.length) {
+    if (!clients.length && route !== ALL_ROUTES_VALUE) {
         const allPayload = await apiGet("/clients");
         const allClients = extractClients(allPayload);
         const routeKey = normalizeTextForMatch(route);
@@ -528,6 +543,34 @@ async function loadClientsByAdjustRoute() {
     renderAdjustTable();
     if (refs.adjustTableShell) refs.adjustTableShell.scrollTop = 0;
     setStatus(`Ruta ${route}: ${state.adjustClientsRaw.length} clientes cargados.`);
+}
+
+function exportCurrentErrorsToXlsx() {
+    if (typeof XLSX === "undefined") {
+        setStatus("No se pudo exportar: libreria XLSX no disponible.");
+        return;
+    }
+    applyAdjustFilters();
+    if (!state.clientsInAdjustTable.length) {
+        setStatus("No hay datos para exportar con los filtros actuales.");
+        return;
+    }
+
+    const rows = state.clientsInAdjustTable.map((client) => ({
+        cliente: client.clientId || "",
+        nombre_o_razon_social: client.nombre_o_razon_social || client.name || "",
+        direccion: client.address || "",
+        ruta: client.route || "",
+        transporte: client.transport || "",
+        error: getClientErrorLabel(client)
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Errores");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    XLSX.writeFile(workbook, `errores-filtrados-${stamp}.xlsx`);
+    setStatus(`XLSX generado con ${rows.length} filas.`);
 }
 
 function fillAdjustFormByKey(encodedKey) {
@@ -1057,6 +1100,7 @@ function bindEvents() {
         state.adjustReachedBottom = false;
         renderAdjustTable();
     });
+    bindIfExists(refs.downloadErrorsXlsxBtn, "click", exportCurrentErrorsToXlsx);
     bindIfExists(refs.adjustClientForm, "submit", submitAdjustForm);
     bindIfExists(refs.closeClientModal, "click", () => {
         refs.adjustClientModal.style.display = "none";
