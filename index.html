@@ -50,16 +50,14 @@
                             <button class="menu-primary-btn empa" type="button" data-go-page="graph">Abrir grafo</button>
                         </div>
                     </article>
-
                     <article class="menu-section">
                         <div class="menu-section-badge">Modulo B</div>
-                        <h2>Modificar datos</h2>
+                        <h2>Ajustar datos</h2>
                         <p>
-                            Cambia nombres, prioridades, pesos de rutas y agrega nuevos nodos o conexiones
-                            para preparar escenarios de optimizacion.
+                            Corrige clientes con información incompleta y edita clientes por ruta.
                         </p>
                         <div class="menu-actions">
-                            <button class="menu-primary-btn empa" type="button" data-go-page="edit">Editar datos</button>
+                            <button class="menu-primary-btn empa" type="button" data-go-page="adjust">Ajustar datos</button>
                         </div>
                     </article>
                 </div>
@@ -128,134 +126,27 @@
         </section>
     </main>
 
-    <main id="page-edit" class="app-page app-inner-page">
-        <section class="page-shell">
-            <header class="section-hero">
-                <div>
-                    <p class="menu-kicker">Modulo B</p>
-                    <h2>Modificar datos</h2>
-                    <p>
-                        Ajusta sucursales y rutas para simular prioridades, pesos y nuevas conexiones del sistema.
-                    </p>
-                </div>
-                <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
-            </header>
-
-            <section class="edit-layout">
-                <article class="edit-card">
-                    <div class="edit-card-head">
-                        <h3>Nodos o sucursales</h3>
-                        <span class="pill-count" id="nodes-count">0 nodos</span>
-                    </div>
-                    <form id="node-form" class="editor-form">
-                        <div class="compact-grid">
-                            <div class="field">
-                                <label for="node-id">Codigo</label>
-                                <input id="node-id" name="id" type="text" maxlength="12" placeholder="SUC06" required />
-                            </div>
-                            <div class="field">
-                                <label for="node-name">Nombre</label>
-                                <input id="node-name" name="name" type="text" placeholder="Sucursal Nueva" required />
-                            </div>
-                            <div class="field">
-                                <label for="node-priority">Prioridad</label>
-                                <input id="node-priority" name="priority" type="number" min="1" max="10" value="3" required />
-                            </div>
-                            <div class="field field-action">
-                                <button type="submit">Guardar nodo</button>
-                            </div>
-                        </div>
-                    </form>
-
-                    <div class="table-shell">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Codigo</th>
-                                    <th>Nombre</th>
-                                    <th>Prioridad</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="nodes-table-body"></tbody>
-                        </table>
-                    </div>
-                </article>
-
-                <article class="edit-card">
-                    <div class="edit-card-head">
-                        <h3>Rutas y pesos</h3>
-                        <span class="pill-count" id="edges-count">0 rutas</span>
-                    </div>
-                    <form id="edge-form" class="editor-form">
-                        <div class="compact-grid compact-grid--routes">
-                            <div class="field">
-                                <label for="edge-origin">Origen</label>
-                                <select id="edge-origin" name="origin" required></select>
-                            </div>
-                            <div class="field">
-                                <label for="edge-destination">Destino</label>
-                                <select id="edge-destination" name="destination" required></select>
-                            </div>
-                            <div class="field">
-                                <label for="edge-weight">Peso</label>
-                                <input id="edge-weight" name="weight" type="number" min="1" value="10" required />
-                            </div>
-                            <div class="field field-action">
-                                <button type="submit">Guardar ruta</button>
-                            </div>
-                        </div>
-                    </form>
-
-                    <div class="table-shell">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Peso</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="edges-table-body"></tbody>
-                        </table>
-                    </div>
-                </article>
-            </section>
-
-            <section class="status-strip">
-                <div class="status-card">
-                    <strong>Estado de edicion</strong>
-                    <span id="status-message">Datos cargados desde el ejemplo inicial.</span>
-                </div>
-            </section>
-        </section>
-    </main>
+    <!-- Modulo B eliminado, solo queda Modulo A (grafo) y Modulo C (ajustar datos) -->
 
     <main id="page-adjust" class="app-page app-inner-page">
         <section class="page-shell">
             <header class="section-hero">
-                <div>
-                    <p class="menu-kicker">Modulo C</p>
-                    <h2>Ajustar datos</h2>
-                    <p>Corrige clientes con informacion incompleta y edita clientes por ruta.</p>
+                <div style="display: flex; align-items: center; gap: 24px;">
+                    <div>
+                        <p class="menu-kicker">Modulo B</p>
+                        <h2>Ajustar datos</h2>
+                        <p>Corrige clientes con información incompleta y edita clientes por ruta.</p>
+                    </div>
+                    <div class="table-actions" style="margin-bottom:0;">
+                        <button id="mode-errors-btn" type="button">Arreglo de errores</button>
+                        <button id="mode-routes-btn" type="button">Editar datos</button>
+                    </div>
                 </div>
                 <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
             </header>
 
-            <section class="edit-layout">
-                <article class="edit-card">
-                    <div class="edit-card-head">
-                        <h3>Modo de ajuste</h3>
-                    </div>
-                    <div class="table-actions">
-                        <button id="mode-errors-btn" type="button">Arreglo de errores</button>
-                        <button id="mode-routes-btn" type="button">Editar datos</button>
-                    </div>
-                    <p id="adjust-mode-description" class="menu-kicker">Selecciona un modo para empezar.</p>
-                </article>
-
-                <article class="edit-card">
+            <section class="edit-layout" style="grid-template-columns: 1fr;">
+                <article class="edit-card" style="max-width: 900px; margin: 0 auto;">
                     <div class="edit-card-head">
                         <h3>Clientes por ruta</h3>
                     </div>
@@ -263,7 +154,7 @@
                         <label for="adjust-route-select">Selecciona una ruta</label>
                         <select id="adjust-route-select"></select>
                     </div>
-                    <div class="table-shell">
+                    <div class="table-shell" style="max-height: 340px; overflow-y: auto;">
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -281,11 +172,11 @@
                 </article>
             </section>
 
-            <section class="status-strip">
-                <article class="edit-card">
-                    <div class="edit-card-head">
-                        <h3>Formulario de cliente</h3>
-                    </div>
+            <!-- Modal para formulario de cliente -->
+            <div id="adjust-client-modal" class="modal" style="display:none;">
+                <div class="modal-content">
+                    <span class="close-modal" id="close-client-modal">&times;</span>
+                    <h3>Formulario de cliente</h3>
                     <form id="adjust-client-form" class="editor-form">
                         <div class="compact-grid">
                             <div class="field">
@@ -313,8 +204,8 @@
                             </div>
                         </div>
                     </form>
-                </article>
-            </section>
+                </div>
+            </div>
         </section>
     </main>
 

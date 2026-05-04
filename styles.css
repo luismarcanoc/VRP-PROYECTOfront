@@ -1,3 +1,58 @@
+/* Modal para formulario de cliente */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: auto;
+    background: rgba(0,0,0,0.25);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--pdt-panel);
+    margin: 60px auto;
+    padding: 32px 28px 24px 28px;
+    border: 1px solid var(--pdt-border);
+    border-radius: 18px;
+    max-width: 480px;
+    width: 96vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    position: relative;
+    animation: modalIn 0.18s cubic-bezier(.4,1.6,.6,1) 1;
+}
+
+@keyframes modalIn {
+    from { transform: translateY(40px) scale(0.98); opacity: 0; }
+    to { transform: none; opacity: 1; }
+}
+
+.close-modal {
+    position: absolute;
+    top: 12px;
+    right: 18px;
+    font-size: 2rem;
+    color: var(--pdt-brown-dark);
+    cursor: pointer;
+    font-weight: 900;
+    background: none;
+    border: none;
+    z-index: 10;
+    transition: color 0.18s;
+}
+.close-modal:hover {
+    color: #8f2f17;
+}
+
+/* Mejorar tabla de clientes con scroll */
+.edit-card .table-shell {
+    max-height: 340px;
+    overflow-y: auto;
+}
 :root {
     --pdt-black: #000000;
     --pdt-cream: #f8f3e9;

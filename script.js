@@ -88,7 +88,9 @@ const refs = {
     adjustClientName: document.getElementById("adjust-client-name"),
     adjustClientAddress: document.getElementById("adjust-client-address"),
     adjustClientRoute: document.getElementById("adjust-client-route"),
-    adjustClientTransport: document.getElementById("adjust-client-transport")
+    adjustClientTransport: document.getElementById("adjust-client-transport"),
+    adjustClientModal: document.getElementById("adjust-client-modal"),
+    closeClientModal: document.getElementById("close-client-modal")
 };
 
 function setStatus(message) {
@@ -240,12 +242,11 @@ function renderAdjustTable() {
         refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">Sin clientes para mostrar.</td></tr>`;
         return;
     }
-
     refs.adjustRouteTableBody.innerHTML = state.clientsInAdjustTable
         .map((client) => `
             <tr>
                 <td>${client.clientId}</td>
-                <td>${client.name || "-"}</td>
+                <td>${client.nombre_o_razon_social || client.name || "-"}</td>
                 <td>${client.address || "-"}</td>
                 <td>
                     <div class="table-actions">
@@ -289,10 +290,11 @@ function fillAdjustFormByKey(encodedKey) {
     if (!client) return;
     state.selectedClientKey = key;
     refs.adjustClientId.value = client.clientId;
-    refs.adjustClientName.value = client.name || "";
+    refs.adjustClientName.value = client.nombre_o_razon_social || client.name || "";
     refs.adjustClientAddress.value = client.address || "";
     refs.adjustClientRoute.value = client.route || "";
     refs.adjustClientTransport.value = client.transport || "";
+    refs.adjustClientModal.style.display = "flex";
 }
 
 async function submitAdjustForm(event) {
@@ -305,13 +307,14 @@ async function submitAdjustForm(event) {
         await apiSend(`/clients/${encodeURIComponent(state.selectedClientKey)}`, {
             method: "PUT",
             body: JSON.stringify({
-                name: refs.adjustClientName.value,
+                nombre_o_razon_social: refs.adjustClientName.value,
                 address: refs.adjustClientAddress.value,
                 route: refs.adjustClientRoute.value,
                 transport: refs.adjustClientTransport.value
             })
         });
         setStatus("Cliente actualizado correctamente.");
+        refs.adjustClientModal.style.display = "none";
         if (state.adjustMode === "errors") {
             await setAdjustMode("errors");
         } else {
@@ -392,15 +395,15 @@ function getNodePositions() {
 }
 
 function renderGraph() {
-    if (!state.nodes.length) {
-        refs.graphStage.innerHTML = `<div class="empty-state">No hay nodos para visualizar.</div>`;
+    // Filtrar solo clientes de tipo 'DESPACHO' para el grafo
+    const despachoClients = (state.nodes || []).filter(n => n.transport === 'DESPACHO' || n.tipo_transporte === 'DESPACHO' || n.transport_type === 'DESPACHO');
+    if (!despachoClients.length) {
+        refs.graphStage.innerHTML = `<div class="empty-state">No hay clientes de tipo DESPACHO para visualizar.</div>`;
         return;
     }
-
     const positions = getNodePositions();
     const maxWeight = state.edges.reduce((max, edge) => Math.max(max, edge.weight), 1);
     const minWeight = state.edges.reduce((min, edge) => Math.min(min, edge.weight), maxWeight);
-
     const edgesSvg = state.edges
         .map((edge) => {
             const origin = positions.get(edge.origin);
@@ -409,7 +412,6 @@ function renderGraph() {
             const midX = (origin.x + destination.x) / 2;
             const midY = (origin.y + destination.y) / 2;
             const edgeColor = getEdgeColor(edge.weight, minWeight, maxWeight);
-
             return `
                 <g>
                     <line x1="${origin.x}" y1="${origin.y}" x2="${destination.x}" y2="${destination.y}"
@@ -421,29 +423,22 @@ function renderGraph() {
             `;
         })
         .join("");
-
-    const nodesSvg = state.nodes
+    const nodesSvg = despachoClients
         .map((node) => {
             const position = positions.get(node.id);
             if (!position) return "";
-            const radius = 22 + node.priority * 3;
-            const labelY = position.y + radius + 22;
-
+            const radius = 22 + (node.priority || 3) * 3;
             return `
-                <g>
+                <g class="graph-node" data-node-id="${node.id}">
                     <circle cx="${position.x}" cy="${position.y}" r="${radius}" fill="#fff8ed" stroke="#c06e32" stroke-width="3"></circle>
                     <circle cx="${position.x}" cy="${position.y}" r="${Math.max(8, radius - 12)}" fill="rgba(192,110,50,0.14)"></circle>
-                    <text x="${position.x}" y="${position.y + 5}" fill="#000000" font-size="12" font-weight="800" text-anchor="middle">
-                        ${node.id}
-                    </text>
-                    <text x="${position.x}" y="${labelY}" fill="#5f4634" font-size="13" font-weight="700" text-anchor="middle">
-                        ${node.name}
+                    <text x="${position.x}" y="${position.y + 5}" fill="#000000" font-size="13" font-weight="800" text-anchor="middle">
+                        ${node.nombre_o_razon_social || node.name || node.id}
                     </text>
                 </g>
             `;
         })
         .join("");
-
     refs.graphStage.innerHTML = `
         <svg viewBox="${-GRAPH_BOUNDS.paddingX} ${-GRAPH_BOUNDS.paddingY} ${GRAPH_BOUNDS.width + (GRAPH_BOUNDS.paddingX * 2)} ${GRAPH_BOUNDS.height + (GRAPH_BOUNDS.paddingY * 2)}" role="img" aria-label="Grafo de rutas de distribucion" preserveAspectRatio="xMidYMid meet">
             <g id="graph-viewport" transform="translate(${state.graphView.translateX} ${state.graphView.translateY}) scale(${state.graphView.scale})">
@@ -451,9 +446,34 @@ function renderGraph() {
                 ${nodesSvg}
             </g>
         </svg>
+        <div id="graph-node-popup" class="modal" style="display:none;position:absolute;"></div>
     `;
-
     syncGraphViewportTransform();
+    // Bind hover para mostrar pop-up de detalles
+    const svg = refs.graphStage.querySelector("svg");
+    if (!svg) return;
+    svg.querySelectorAll('.graph-node').forEach((el) => {
+        el.addEventListener('mouseenter', (e) => {
+            const nodeId = el.getAttribute('data-node-id');
+            const node = despachoClients.find(n => n.id === nodeId);
+            if (!node) return;
+            const popup = document.getElementById('graph-node-popup');
+            popup.innerHTML = `<div class='modal-content' style='padding:18px 22px;max-width:320px;'>
+                <strong>${node.nombre_o_razon_social || node.name || node.id}</strong><br>
+                <span><b>Cliente:</b> ${node.clientId || node.id}</span><br>
+                <span><b>Dirección:</b> ${node.address || '-'}</span><br>
+                <span><b>Ruta:</b> ${node.route || '-'}</span><br>
+                <span><b>Transporte:</b> ${node.transport || node.tipo_transporte || '-'}</span>
+            </div>`;
+            popup.style.display = 'block';
+            popup.style.left = (e.clientX + 20) + 'px';
+            popup.style.top = (e.clientY - 20) + 'px';
+        });
+        el.addEventListener('mouseleave', () => {
+            const popup = document.getElementById('graph-node-popup');
+            popup.style.display = 'none';
+        });
+    });
 }
 
 function getEdgeColor(weight, minWeight, maxWeight) {
