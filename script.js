@@ -112,7 +112,25 @@ const refs = {
 };
 
 function setStatus(message) {
+    if (!refs.statusMessage) return;
     refs.statusMessage.textContent = message;
+}
+
+function bindIfExists(element, eventName, handler, options) {
+    if (!element) return;
+    element.addEventListener(eventName, handler, options);
+}
+
+function setAdjustTableMessage(message) {
+    refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">${message}</td></tr>`;
+}
+
+function extractClients(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.clients)) return payload.clients;
+    if (Array.isArray(payload?.data?.clients)) return payload.data.clients;
+    if (Array.isArray(payload?.rows)) return payload.rows;
+    return [];
 }
 
 function normalizeTextForMatch(value) {
@@ -332,16 +350,17 @@ function renderAll() {
 }
 
 function renderMetrics() {
-    refs.metricNodes.textContent = String(state.nodes.length);
-    refs.metricEdges.textContent = String(state.edges.length);
-    refs.metricPriority.textContent = String(
+    if (refs.metricNodes) refs.metricNodes.textContent = String(state.nodes.length);
+    if (refs.metricEdges) refs.metricEdges.textContent = String(state.edges.length);
+    if (refs.metricPriority) refs.metricPriority.textContent = String(
         state.nodes.reduce((max, node) => Math.max(max, toNumber(node.priority, 0)), 0)
     );
-    refs.nodesCount.textContent = `${state.nodes.length} nodos`;
-    refs.edgesCount.textContent = `${state.edges.length} rutas`;
+    if (refs.nodesCount) refs.nodesCount.textContent = `${state.nodes.length} nodos`;
+    if (refs.edgesCount) refs.edgesCount.textContent = `${state.edges.length} rutas`;
 }
 
 function renderSelectOptions() {
+    if (!refs.edgeOrigin || !refs.edgeDestination) return;
     const options = state.nodes
         .map((node) => `<option value="${node.id}">${node.id} - ${node.name}</option>`)
         .join("");
@@ -353,7 +372,7 @@ function renderSelectOptions() {
 function renderAdjustTable() {
     applyAdjustFilters();
     if (!state.clientsInAdjustTable.length) {
-        refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">Sin clientes para mostrar.</td></tr>`;
+        setAdjustTableMessage("Sin clientes para mostrar.");
         if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
         refs.adjustShowMoreBtn.style.display = "none";
         return;
@@ -457,14 +476,15 @@ async function loadClientsByAdjustRoute() {
         return;
     }
     const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
-    let clients = payload.clients || [];
+    let clients = extractClients(payload);
 
     // Fallback defensivo: si el filtro exacto en backend falla por formato de texto,
     // trae todo y filtra en frontend por ruta normalizada.
     if (!clients.length) {
         const allPayload = await apiGet("/clients");
+        const allClients = extractClients(allPayload);
         const routeKey = normalizeTextForMatch(route);
-        clients = (allPayload.clients || []).filter(
+        clients = allClients.filter(
             (client) => normalizeTextForMatch(client.route) === routeKey
         );
     }
@@ -517,6 +537,7 @@ async function submitAdjustForm(event) {
 }
 
 function renderNodesTable() {
+    if (!refs.nodesTableBody) return;
     if (!state.nodes.length) {
         refs.nodesTableBody.innerHTML = `<tr><td colspan="4">Sin nodos registrados.</td></tr>`;
         return;
@@ -540,6 +561,7 @@ function renderNodesTable() {
 }
 
 function renderEdgesTable() {
+    if (!refs.edgesTableBody) return;
     if (!state.edges.length) {
         refs.edgesTableBody.innerHTML = `<tr><td colspan="4">Sin rutas registradas.</td></tr>`;
         return;
@@ -707,6 +729,7 @@ function setGraphScale(nextScale, anchorX = GRAPH_BOUNDS.width / 2, anchorY = GR
 }
 
 function bindGraphInteractions() {
+    if (!refs.graphStage) return;
     refs.graphStage.addEventListener("wheel", (event) => {
         const svg = refs.graphStage.querySelector("svg");
         if (!svg) return;
@@ -758,6 +781,7 @@ function bindGraphInteractions() {
 }
 
 function renderSummary() {
+    if (!refs.summaryHub || !refs.summaryShortest || !refs.summaryLongest || !refs.summaryTotal) return;
     const plantNode = state.nodes.reduce((best, node) => {
         if (!best) return node;
         return node.priority > best.priority ? node : best;
@@ -914,52 +938,64 @@ function bindEvents() {
         });
     });
 
-    refs.reloadBackend.addEventListener("click", loadInitialData);
-    refs.optimizeRouteBtn.addEventListener("click", optimizeCurrentRoute);
-    refs.nodeForm.addEventListener("submit", handleNodeSubmit);
-    refs.edgeForm.addEventListener("submit", handleEdgeSubmit);
-    refs.modeErrorsBtn.addEventListener("click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
-    refs.modeRoutesBtn.addEventListener("click", () => setAdjustMode("routes").catch((e) => setStatus(e.message)));
-    refs.adjustRouteSelect.addEventListener("change", () => loadClientsByAdjustRoute().catch((e) => setStatus(e.message)));
-    refs.adjustShowMoreBtn.addEventListener("click", () => {
+    bindIfExists(refs.reloadBackend, "click", loadInitialData);
+    bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
+    bindIfExists(refs.nodeForm, "submit", handleNodeSubmit);
+    bindIfExists(refs.edgeForm, "submit", handleEdgeSubmit);
+    bindIfExists(refs.modeErrorsBtn, "click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
+    bindIfExists(refs.modeRoutesBtn, "click", () => setAdjustMode("routes").catch((e) => setStatus(e.message)));
+    const loadRouteClientsSafely = async () => {
+        try {
+            await loadClientsByAdjustRoute();
+        } catch (error) {
+            state.adjustClientsRaw = [];
+            refs.adjustShowMoreBtn.style.display = "none";
+            if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
+            setAdjustTableMessage(`Error cargando clientes: ${error.message}`);
+            setStatus(`Error cargando clientes: ${error.message}`);
+        }
+    };
+    bindIfExists(refs.adjustRouteSelect, "change", () => loadRouteClientsSafely());
+    bindIfExists(refs.adjustRouteSelect, "input", () => loadRouteClientsSafely());
+    bindIfExists(refs.adjustShowMoreBtn, "click", () => {
         state.adjustPagination.visible += state.adjustPagination.pageSize;
         renderAdjustTable();
     });
-    refs.adjustSearchInput.addEventListener("input", () => {
+    bindIfExists(refs.adjustSearchInput, "input", () => {
         state.adjustFilters.query = refs.adjustSearchInput.value || "";
         state.adjustPagination.visible = state.adjustPagination.pageSize;
         renderAdjustTable();
     });
-    refs.adjustTransportFilter.addEventListener("change", () => {
+    bindIfExists(refs.adjustTransportFilter, "change", () => {
         state.adjustFilters.transport = refs.adjustTransportFilter.value || "all";
         state.adjustPagination.visible = state.adjustPagination.pageSize;
         renderAdjustTable();
     });
-    refs.adjustClientForm.addEventListener("submit", submitAdjustForm);
-    refs.closeClientModal.addEventListener("click", () => {
+    bindIfExists(refs.adjustClientForm, "submit", submitAdjustForm);
+    bindIfExists(refs.closeClientModal, "click", () => {
         refs.adjustClientModal.style.display = "none";
     });
-    refs.adjustClientModal.addEventListener("click", (event) => {
+    bindIfExists(refs.adjustClientModal, "click", (event) => {
         if (event.target === refs.adjustClientModal) {
             refs.adjustClientModal.style.display = "none";
         }
     });
 
-    refs.nodesTableBody.addEventListener("click", (event) => {
+    bindIfExists(refs.nodesTableBody, "click", (event) => {
         const target = event.target.closest("button");
         if (!target) return;
         if (target.dataset.editNode) fillNodeForm(target.dataset.editNode);
         if (target.dataset.deleteNode) deleteNode(target.dataset.deleteNode);
     });
 
-    refs.edgesTableBody.addEventListener("click", (event) => {
+    bindIfExists(refs.edgesTableBody, "click", (event) => {
         const target = event.target.closest("button");
         if (!target) return;
         if (target.dataset.editEdge) fillEdgeForm(target.dataset.editEdge);
         if (target.dataset.deleteEdge) deleteEdge(target.dataset.deleteEdge);
     });
 
-    refs.adjustRouteTableBody.addEventListener("click", (event) => {
+    bindIfExists(refs.adjustRouteTableBody, "click", (event) => {
         const target = event.target.closest("button");
         if (!target) return;
         if (target.dataset.editClient) fillAdjustFormByKey(target.dataset.editClient);
