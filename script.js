@@ -30,6 +30,11 @@ const state = {
     adjustMode: "none",
     selectedClientKey: "",
     clientsInAdjustTable: [],
+    adjustClientsRaw: [],
+    adjustFilters: {
+        query: "",
+        transport: "all"
+    },
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -82,6 +87,9 @@ const refs = {
     modeRoutesBtn: document.getElementById("mode-routes-btn"),
     adjustRouteSelect: document.getElementById("adjust-route-select"),
     adjustRouteTableBody: document.getElementById("adjust-route-table-body"),
+    adjustSearchInput: document.getElementById("adjust-search-input"),
+    adjustTransportFilter: document.getElementById("adjust-transport-filter"),
+    adjustResultCount: document.getElementById("adjust-result-count"),
     adjustClientForm: document.getElementById("adjust-client-form"),
     adjustClientId: document.getElementById("adjust-client-id"),
     adjustClientName: document.getElementById("adjust-client-name"),
@@ -237,10 +245,13 @@ function renderSelectOptions() {
 }
 
 function renderAdjustTable() {
+    applyAdjustFilters();
     if (!state.clientsInAdjustTable.length) {
         refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">Sin clientes para mostrar.</td></tr>`;
+        if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
         return;
     }
+    if (refs.adjustResultCount) refs.adjustResultCount.textContent = `${state.clientsInAdjustTable.length} clientes`;
     refs.adjustRouteTableBody.innerHTML = state.clientsInAdjustTable
         .map((client) => `
             <tr>
@@ -257,28 +268,82 @@ function renderAdjustTable() {
         .join("");
 }
 
+function applyAdjustFilters() {
+    const source = Array.isArray(state.adjustClientsRaw) ? state.adjustClientsRaw : [];
+    const query = String(state.adjustFilters.query || "").trim().toLowerCase();
+    const transport = String(state.adjustFilters.transport || "all").trim().toLowerCase();
+
+    state.clientsInAdjustTable = source.filter((client) => {
+        const clientTransport = String(client.transport || "").trim().toLowerCase();
+        if (transport !== "all" && clientTransport !== transport) return false;
+        if (!query) return true;
+        const haystack = [
+            client.clientId,
+            client.nombre_o_razon_social,
+            client.name,
+            client.address,
+            client.route,
+            client.transport
+        ]
+            .map((value) => String(value || "").toLowerCase())
+            .join(" ");
+        return haystack.includes(query);
+    });
+}
+
+function updateAdjustModeButtons() {
+    refs.modeErrorsBtn.classList.toggle("is-active", state.adjustMode === "errors");
+    refs.modeRoutesBtn.classList.toggle("is-active", state.adjustMode === "routes");
+}
+
+function syncTransportFilterOptions() {
+    if (!refs.adjustTransportFilter) return;
+    const current = refs.adjustTransportFilter.value || "all";
+    const transports = Array.from(
+        new Set(
+            (state.adjustClientsRaw || [])
+                .map((item) => String(item.transport || "").trim())
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b));
+
+    refs.adjustTransportFilter.innerHTML = `<option value="all">Todos los transportes</option>${transports
+        .map((value) => `<option value="${value}">${value}</option>`)
+        .join("")}`;
+
+    const isCurrentValid = current === "all" || transports.includes(current);
+    refs.adjustTransportFilter.value = isCurrentValid ? current : "all";
+    state.adjustFilters.transport = refs.adjustTransportFilter.value;
+}
+
 async function setAdjustMode(mode) {
     state.adjustMode = mode;
+    updateAdjustModeButtons();
     if (mode === "errors") {
         const payload = await apiGet("/errors");
-        state.clientsInAdjustTable = payload.clients || [];
+        state.adjustClientsRaw = payload.clients || [];
+        syncTransportFilterOptions();
         renderAdjustTable();
+        setStatus(`Mostrando ${state.adjustClientsRaw.length} clientes con errores.`);
         return;
     }
-    state.clientsInAdjustTable = [];
-    renderAdjustTable();
+    await loadClientsByAdjustRoute();
 }
 
 async function loadClientsByAdjustRoute() {
     const route = refs.adjustRouteSelect.value;
     if (!route) {
-        state.clientsInAdjustTable = [];
+        state.adjustClientsRaw = [];
+        syncTransportFilterOptions();
         renderAdjustTable();
+        setStatus("Selecciona una ruta para mostrar clientes.");
         return;
     }
     const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
-    state.clientsInAdjustTable = payload.clients || [];
+    state.adjustClientsRaw = payload.clients || [];
+    syncTransportFilterOptions();
     renderAdjustTable();
+    setStatus(`Ruta ${route}: ${state.adjustClientsRaw.length} clientes cargados.`);
 }
 
 function fillAdjustFormByKey(encodedKey) {
@@ -304,7 +369,7 @@ async function submitAdjustForm(event) {
         await apiSend(`/clients/${encodeURIComponent(state.selectedClientKey)}`, {
             method: "PUT",
             body: JSON.stringify({
-                nombre_o_razon_social: refs.adjustClientName.value,
+                name: refs.adjustClientName.value,
                 address: refs.adjustClientAddress.value,
                 route: refs.adjustClientRoute.value,
                 transport: refs.adjustClientTransport.value
@@ -392,10 +457,8 @@ function getNodePositions() {
 }
 
 function renderGraph() {
-    // Filtrar solo clientes de tipo 'DESPACHO' para el grafo
-    const despachoClients = (state.nodes || []).filter(n => n.transport === 'DESPACHO' || n.tipo_transporte === 'DESPACHO' || n.transport_type === 'DESPACHO');
-    if (!despachoClients.length) {
-        refs.graphStage.innerHTML = `<div class="empty-state">No hay clientes de tipo DESPACHO para visualizar.</div>`;
+    if (!state.nodes.length) {
+        refs.graphStage.innerHTML = `<div class="empty-state">No hay nodos para visualizar.</div>`;
         return;
     }
     const positions = getNodePositions();
@@ -420,7 +483,7 @@ function renderGraph() {
             `;
         })
         .join("");
-    const nodesSvg = despachoClients
+    const nodesSvg = state.nodes
         .map((node) => {
             const position = positions.get(node.id);
             if (!position) return "";
@@ -452,7 +515,7 @@ function renderGraph() {
     svg.querySelectorAll('.graph-node').forEach((el) => {
         el.addEventListener('mouseenter', (e) => {
             const nodeId = el.getAttribute('data-node-id');
-            const node = despachoClients.find(n => n.id === nodeId);
+            const node = state.nodes.find(n => n.id === nodeId);
             if (!node) return;
             const popup = document.getElementById('graph-node-popup');
             popup.innerHTML = `<div class='modal-content' style='padding:18px 22px;max-width:320px;'>
@@ -726,7 +789,23 @@ function bindEvents() {
     refs.modeErrorsBtn.addEventListener("click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
     refs.modeRoutesBtn.addEventListener("click", () => setAdjustMode("routes").catch((e) => setStatus(e.message)));
     refs.adjustRouteSelect.addEventListener("change", () => loadClientsByAdjustRoute().catch((e) => setStatus(e.message)));
+    refs.adjustSearchInput.addEventListener("input", () => {
+        state.adjustFilters.query = refs.adjustSearchInput.value || "";
+        renderAdjustTable();
+    });
+    refs.adjustTransportFilter.addEventListener("change", () => {
+        state.adjustFilters.transport = refs.adjustTransportFilter.value || "all";
+        renderAdjustTable();
+    });
     refs.adjustClientForm.addEventListener("submit", submitAdjustForm);
+    refs.closeClientModal.addEventListener("click", () => {
+        refs.adjustClientModal.style.display = "none";
+    });
+    refs.adjustClientModal.addEventListener("click", (event) => {
+        if (event.target === refs.adjustClientModal) {
+            refs.adjustClientModal.style.display = "none";
+        }
+    });
 
     refs.nodesTableBody.addEventListener("click", (event) => {
         const target = event.target.closest("button");
@@ -752,6 +831,7 @@ function bindEvents() {
 function init() {
     bindEvents();
     bindGraphInteractions();
+    updateAdjustModeButtons();
     loadInitialData();
 }
 

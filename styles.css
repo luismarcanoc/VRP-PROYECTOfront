@@ -366,6 +366,14 @@ button:focus-visible,
     border-color: var(--pdt-brown);
 }
 
+.menu-secondary-btn.is-active {
+    background: #000000;
+    color: var(--pdt-cream);
+    border-color: #000000;
+    font-weight: 900;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
 .app-inner-page {
     min-height: 100vh;
 }
@@ -477,6 +485,17 @@ button:focus-visible,
     gap: 18px;
 }
 
+.adjust-layout-full {
+    grid-template-columns: 1fr;
+}
+
+.adjust-card-wide {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    min-height: 72vh;
+}
+
 .pill-count {
     padding: 8px 12px;
     border-radius: 999px;
@@ -494,6 +513,23 @@ button:focus-visible,
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px 16px;
+}
+
+.adjust-toolbar {
+    grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr) minmax(220px, 0.8fr);
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 14px;
+}
+
+.adjust-mode-actions {
+    gap: 10px;
+    align-items: center;
+}
+
+.adjust-table-shell {
+    max-height: 58vh;
+    overflow-y: auto;
 }
 
 .compact-grid--routes {
@@ -650,7 +686,8 @@ button:focus-visible,
     .graph-layout,
     .edit-layout,
     .menu-sections--dual,
-    .compact-grid--routes {
+    .compact-grid--routes,
+    .adjust-toolbar {
         grid-template-columns: 1fr;
     }
 
@@ -679,7 +716,8 @@ button:focus-visible,
     }
 
     .hero-metrics,
-    .compact-grid {
+    .compact-grid,
+    .adjust-toolbar {
         grid-template-columns: 1fr;
     }
 
@@ -690,5 +728,9 @@ button:focus-visible,
     .graph-stage {
         height: 420px;
         min-height: 420px;
+    }
+
+    .adjust-card-wide {
+        min-height: 62vh;
     }
 }

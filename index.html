@@ -139,19 +139,30 @@
                 <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
             </header>
 
-            <section class="edit-layout" style="grid-template-columns: 1fr;">
-                <article class="edit-card" style="max-width: 1200px; margin: 0 auto;">
-                    <div class="compact-grid" style="grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px;">
+            <section class="edit-layout adjust-layout-full">
+                <article class="edit-card adjust-card-wide">
+                    <div class="compact-grid adjust-toolbar">
                         <div class="field">
                             <label for="adjust-route-select">Selecciona una ruta para editar</label>
                             <select id="adjust-route-select"></select>
                         </div>
-                        <div class="table-actions" style="display: flex; gap: 8px;">
+                        <div class="table-actions adjust-mode-actions">
                             <button id="mode-errors-btn" type="button" class="menu-secondary-btn">Arreglo de errores</button>
                             <button id="mode-routes-btn" type="button" class="menu-secondary-btn">Editar datos</button>
                         </div>
+                        <div class="field">
+                            <label for="adjust-search-input">Buscar cliente</label>
+                            <input id="adjust-search-input" type="text" placeholder="Cliente, nombre, direccion o ruta" />
+                        </div>
+                        <div class="field">
+                            <label for="adjust-transport-filter">Filtro por transporte</label>
+                            <select id="adjust-transport-filter">
+                                <option value="all">Todos los transportes</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="table-shell" style="max-height: 50vh; overflow-y: auto;">
+                    <div class="pill-count" id="adjust-result-count">0 clientes</div>
+                    <div class="table-shell adjust-table-shell">
                         <table class="data-table">
                             <thead>
                                 <tr>
