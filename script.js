@@ -39,6 +39,7 @@ const state = {
         pageSize: 50,
         visible: 50
     },
+    adjustReachedBottom: false,
     loading: {
         activeRequests: 0
     },
@@ -94,6 +95,8 @@ const refs = {
     modeRoutesBtn: document.getElementById("mode-routes-btn"),
     adjustRouteSelect: document.getElementById("adjust-route-select"),
     adjustRouteTableBody: document.getElementById("adjust-route-table-body"),
+    adjustTableHeaderRow: document.getElementById("adjust-table-header-row"),
+    adjustTableShell: document.querySelector(".adjust-table-shell"),
     adjustSearchInput: document.getElementById("adjust-search-input"),
     adjustTransportFilter: document.getElementById("adjust-transport-filter"),
     adjustResultCount: document.getElementById("adjust-result-count"),
@@ -122,7 +125,8 @@ function bindIfExists(element, eventName, handler, options) {
 }
 
 function setAdjustTableMessage(message) {
-    refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">${message}</td></tr>`;
+    const colspan = state.adjustMode === "errors" ? 5 : 4;
+    refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="${colspan}">${message}</td></tr>`;
 }
 
 function extractClients(payload) {
@@ -371,6 +375,7 @@ function renderSelectOptions() {
 
 function renderAdjustTable() {
     applyAdjustFilters();
+    renderAdjustTableHeader();
     if (!state.clientsInAdjustTable.length) {
         setAdjustTableMessage("Sin clientes para mostrar.");
         if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
@@ -386,6 +391,7 @@ function renderAdjustTable() {
                 <td>${client.clientId}</td>
                 <td>${client.nombre_o_razon_social || client.name || "-"}</td>
                 <td>${client.address || "-"}</td>
+                ${state.adjustMode === "errors" ? `<td>${getClientErrorLabel(client)}</td>` : ""}
                 <td>
                     <div class="table-actions">
                         <button type="button" data-edit-client="${encodeURIComponent(client.key)}">Editar</button>
@@ -396,8 +402,33 @@ function renderAdjustTable() {
         .join("");
 
     const hasMore = visibleCount < state.clientsInAdjustTable.length;
-    refs.adjustShowMoreBtn.style.display = hasMore ? "inline-flex" : "none";
-    refs.adjustShowMoreBtn.textContent = hasMore ? `Mostrar más (${Math.min(state.adjustPagination.pageSize, state.clientsInAdjustTable.length - visibleCount)})` : "Mostrar más";
+    refs.adjustShowMoreBtn.style.display = hasMore && state.adjustReachedBottom ? "inline-flex" : "none";
+    refs.adjustShowMoreBtn.textContent = hasMore
+        ? `Mostrar mas (${Math.min(state.adjustPagination.pageSize, state.clientsInAdjustTable.length - visibleCount)})`
+        : "Mostrar mas";
+}
+
+function renderAdjustTableHeader() {
+    if (!refs.adjustTableHeaderRow) return;
+    refs.adjustTableHeaderRow.innerHTML = `
+        <th>Cliente</th>
+        <th>Nombre</th>
+        <th>Direccion</th>
+        ${state.adjustMode === "errors" ? "<th>Error</th>" : ""}
+        <th>Acciones</th>
+    `;
+}
+
+function getClientErrorLabel(client) {
+    const issues = [];
+    if (!String(client.clientId || "").trim()) issues.push("Cliente vacio");
+    if (!String(client.nombre_o_razon_social || client.name || "").trim()) issues.push("Nombre vacio");
+    const address = String(client.address || "").trim();
+    if (!address || address === "0") issues.push("Direccion invalida");
+    const route = String(client.route || "").trim();
+    if (!route) issues.push("Ruta vacia");
+    else if (normalizeTextForMatch(route).includes("revisar manualmente")) issues.push("Ruta: revisar manualmente");
+    return issues.length ? issues.join(" | ") : "Sin error";
 }
 
 function applyAdjustFilters() {
@@ -451,12 +482,14 @@ function syncTransportFilterOptions() {
 async function setAdjustMode(mode) {
     state.adjustMode = mode;
     state.adjustPagination.visible = state.adjustPagination.pageSize;
+    state.adjustReachedBottom = false;
     updateAdjustModeButtons();
     if (mode === "errors") {
         const payload = await apiGet("/errors");
-        state.adjustClientsRaw = payload.clients || [];
+        state.adjustClientsRaw = extractClients(payload);
         syncTransportFilterOptions();
         renderAdjustTable();
+        if (refs.adjustTableShell) refs.adjustTableShell.scrollTop = 0;
         setStatus(`Mostrando ${state.adjustClientsRaw.length} clientes con errores.`);
         return;
     }
@@ -467,6 +500,7 @@ async function loadClientsByAdjustRoute() {
     const route = refs.adjustRouteSelect.value;
     state.adjustMode = "routes";
     state.adjustPagination.visible = state.adjustPagination.pageSize;
+    state.adjustReachedBottom = false;
     updateAdjustModeButtons();
     if (!route) {
         state.adjustClientsRaw = [];
@@ -492,6 +526,7 @@ async function loadClientsByAdjustRoute() {
     state.adjustClientsRaw = clients;
     syncTransportFilterOptions();
     renderAdjustTable();
+    if (refs.adjustTableShell) refs.adjustTableShell.scrollTop = 0;
     setStatus(`Ruta ${route}: ${state.adjustClientsRaw.length} clientes cargados.`);
 }
 
@@ -559,9 +594,17 @@ async function submitAdjustForm(event) {
         });
         setStatus("Cliente actualizado correctamente.");
         refs.adjustClientModal.style.display = "none";
+        try {
+            const routesPayload = await apiGet("/routes");
+            state.routes = routesPayload.routes || [];
+            refreshRouteSelects();
+        } catch (_) {}
         if (state.adjustMode === "errors") {
             await setAdjustMode("errors");
         } else {
+            if (refs.adjustRouteSelect && refs.adjustClientRoute?.value) {
+                refs.adjustRouteSelect.value = refs.adjustClientRoute.value;
+            }
             await loadClientsByAdjustRoute();
         }
     } catch (error) {
@@ -992,16 +1035,26 @@ function bindEvents() {
     bindIfExists(refs.adjustRouteSelect, "input", () => loadRouteClientsSafely());
     bindIfExists(refs.adjustShowMoreBtn, "click", () => {
         state.adjustPagination.visible += state.adjustPagination.pageSize;
+        state.adjustReachedBottom = false;
         renderAdjustTable();
+    });
+    bindIfExists(refs.adjustTableShell, "scroll", () => {
+        const el = refs.adjustTableShell;
+        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+        state.adjustReachedBottom = atBottom;
+        const hasMore = state.adjustPagination.visible < state.clientsInAdjustTable.length;
+        refs.adjustShowMoreBtn.style.display = hasMore && atBottom ? "inline-flex" : "none";
     });
     bindIfExists(refs.adjustSearchInput, "input", () => {
         state.adjustFilters.query = refs.adjustSearchInput.value || "";
         state.adjustPagination.visible = state.adjustPagination.pageSize;
+        state.adjustReachedBottom = false;
         renderAdjustTable();
     });
     bindIfExists(refs.adjustTransportFilter, "change", () => {
         state.adjustFilters.transport = refs.adjustTransportFilter.value || "all";
         state.adjustPagination.visible = state.adjustPagination.pageSize;
+        state.adjustReachedBottom = false;
         renderAdjustTable();
     });
     bindIfExists(refs.adjustClientForm, "submit", submitAdjustForm);
@@ -1047,3 +1100,4 @@ if (document.readyState === "loading") {
 } else {
     init();
 }
+

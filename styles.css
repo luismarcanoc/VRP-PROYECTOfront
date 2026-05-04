@@ -546,6 +546,8 @@ button:focus-visible,
     max-width: 100%;
     margin: 0 auto;
     min-height: 72vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .pill-count {
@@ -580,7 +582,9 @@ button:focus-visible,
 }
 
 .adjust-table-shell {
-    max-height: 58vh;
+    flex: 1;
+    min-height: 54vh;
+    max-height: none;
     overflow-y: auto;
 }
 
