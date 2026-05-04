@@ -503,9 +503,42 @@ function fillAdjustFormByKey(encodedKey) {
     refs.adjustClientId.value = client.clientId;
     refs.adjustClientName.value = client.nombre_o_razon_social || client.name || "";
     refs.adjustClientAddress.value = client.address || "";
+    populateAdjustModalSelects(client);
     refs.adjustClientRoute.value = client.route || "";
     refs.adjustClientTransport.value = client.transport || "";
     refs.adjustClientModal.style.display = "flex";
+}
+
+function populateAdjustModalSelects(client) {
+    if (!refs.adjustClientRoute || !refs.adjustClientTransport) return;
+
+    const routeOptions = Array.from(
+        new Set(
+            [
+                ...(state.routes || []).map((item) => String(item.route || "").trim()),
+                String(client?.route || "").trim()
+            ].filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b));
+
+    const transportOptions = Array.from(
+        new Set(
+            [
+                ...(state.adjustClientsRaw || []).map((item) => String(item.transport || "").trim()),
+                ...(state.clientsInAdjustTable || []).map((item) => String(item.transport || "").trim()),
+                String(client?.transport || "").trim()
+            ].filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b));
+
+    refs.adjustClientRoute.innerHTML = routeOptions
+        .map((route) => `<option value="${route}">${route}</option>`)
+        .join("");
+
+    refs.adjustClientTransport.innerHTML = [
+        `<option value="">Sin transporte</option>`,
+        ...transportOptions.map((transport) => `<option value="${transport}">${transport}</option>`)
+    ].join("");
 }
 
 async function submitAdjustForm(event) {
