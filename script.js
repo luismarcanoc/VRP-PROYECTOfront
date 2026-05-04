@@ -35,6 +35,9 @@ const state = {
         query: "",
         transport: "all"
     },
+    loading: {
+        activeRequests: 0
+    },
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -97,7 +100,10 @@ const refs = {
     adjustClientRoute: document.getElementById("adjust-client-route"),
     adjustClientTransport: document.getElementById("adjust-client-transport"),
     adjustClientModal: document.getElementById("adjust-client-modal"),
-    closeClientModal: document.getElementById("close-client-modal")
+    closeClientModal: document.getElementById("close-client-modal"),
+    loadingOverlay: document.getElementById("loading-overlay"),
+    loadingTitle: document.getElementById("loading-title"),
+    loadingSubtitle: document.getElementById("loading-subtitle")
 };
 
 function setStatus(message) {
@@ -117,16 +123,87 @@ function toNumber(value, fallback = 0) {
 }
 
 async function apiGet(pathname) {
-    const response = await fetch(`${API_BASE}${pathname}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
+    return withLoading(() => fetchWithErrors(`${API_BASE}${pathname}`), getLoadingCopy(pathname, "GET"));
 }
 
 async function apiSend(pathname, options) {
-    const response = await fetch(`${API_BASE}${pathname}`, {
+    const config = {
         headers: { "Content-Type": "application/json" },
         ...options
-    });
+    };
+    const method = String(config.method || "POST").toUpperCase();
+    return withLoading(
+        () => fetchWithErrors(`${API_BASE}${pathname}`, config),
+        getLoadingCopy(pathname, method)
+    );
+}
+
+function showLoading(title, subtitle) {
+    if (!refs.loadingOverlay) return;
+    refs.loadingTitle.textContent = title || "Cargando datos...";
+    refs.loadingSubtitle.textContent = subtitle || "Consultando base de datos del backend. Espera un momento.";
+    refs.loadingOverlay.classList.add("is-visible");
+    refs.loadingOverlay.setAttribute("aria-busy", "true");
+}
+
+function hideLoading() {
+    if (!refs.loadingOverlay) return;
+    refs.loadingOverlay.classList.remove("is-visible");
+    refs.loadingOverlay.setAttribute("aria-busy", "false");
+}
+
+function getLoadingCopy(pathname, method) {
+    if (pathname.includes("/routes")) {
+        return {
+            title: "Cargando rutas...",
+            subtitle: "Consultando rutas en la base de datos del backend."
+        };
+    }
+    if (pathname.includes("/clients") && method === "GET") {
+        return {
+            title: "Cargando clientes...",
+            subtitle: "Buscando clientes en la base de datos del backend."
+        };
+    }
+    if (pathname.includes("/errors")) {
+        return {
+            title: "Buscando errores...",
+            subtitle: "Validando clientes con datos incompletos en backend."
+        };
+    }
+    if (pathname.includes("/optimize-route")) {
+        return {
+            title: "Optimizando ruta...",
+            subtitle: "Calculando orden de visita y consultando distancias."
+        };
+    }
+    if (pathname.includes("/clients/") && method === "PUT") {
+        return {
+            title: "Guardando cambios...",
+            subtitle: "Actualizando cliente en backend y sincronizando datos."
+        };
+    }
+    return {
+        title: "Cargando datos...",
+        subtitle: "Consultando base de datos del backend. Espera un momento."
+    };
+}
+
+async function withLoading(task, copy) {
+    state.loading.activeRequests += 1;
+    showLoading(copy?.title, copy?.subtitle);
+    try {
+        return await task();
+    } finally {
+        state.loading.activeRequests = Math.max(0, state.loading.activeRequests - 1);
+        if (state.loading.activeRequests === 0) {
+            hideLoading();
+        }
+    }
+}
+
+async function fetchWithErrors(url, options) {
+    const response = await fetch(url, options);
     if (!response.ok) {
         let message = `HTTP ${response.status}`;
         try {
