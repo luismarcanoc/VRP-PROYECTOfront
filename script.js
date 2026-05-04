@@ -110,6 +110,14 @@ function setStatus(message) {
     refs.statusMessage.textContent = message;
 }
 
+function normalizeTextForMatch(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+}
+
 function normalizeId(value) {
     return String(value || "")
         .trim()
@@ -216,11 +224,27 @@ async function fetchWithErrors(url, options) {
 }
 
 function refreshRouteSelects() {
-    const options = state.routes
-        .map((item) => `<option value="${item.route}">${item.route} (${item.totalClients})</option>`)
-        .join("");
-    refs.graphRouteSelect.innerHTML = `<option value="">Selecciona ruta</option>${options}`;
-    refs.adjustRouteSelect.innerHTML = `<option value="">Selecciona ruta</option>${options}`;
+    const prevGraphValue = refs.graphRouteSelect.value;
+    const prevAdjustValue = refs.adjustRouteSelect.value;
+
+    refs.graphRouteSelect.innerHTML = "";
+    refs.adjustRouteSelect.innerHTML = "";
+
+    refs.graphRouteSelect.add(new Option("Selecciona ruta", ""));
+    refs.adjustRouteSelect.add(new Option("Selecciona ruta", ""));
+
+    state.routes.forEach((item) => {
+        const label = `${item.route} (${item.totalClients})`;
+        refs.graphRouteSelect.add(new Option(label, item.route));
+        refs.adjustRouteSelect.add(new Option(label, item.route));
+    });
+
+    if (state.routes.some((item) => item.route === prevGraphValue)) {
+        refs.graphRouteSelect.value = prevGraphValue;
+    }
+    if (state.routes.some((item) => item.route === prevAdjustValue)) {
+        refs.adjustRouteSelect.value = prevAdjustValue;
+    }
 }
 
 async function loadInitialData() {
@@ -409,6 +433,8 @@ async function setAdjustMode(mode) {
 
 async function loadClientsByAdjustRoute() {
     const route = refs.adjustRouteSelect.value;
+    state.adjustMode = "routes";
+    updateAdjustModeButtons();
     if (!route) {
         state.adjustClientsRaw = [];
         syncTransportFilterOptions();
@@ -417,7 +443,19 @@ async function loadClientsByAdjustRoute() {
         return;
     }
     const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
-    state.adjustClientsRaw = payload.clients || [];
+    let clients = payload.clients || [];
+
+    // Fallback defensivo: si el filtro exacto en backend falla por formato de texto,
+    // trae todo y filtra en frontend por ruta normalizada.
+    if (!clients.length) {
+        const allPayload = await apiGet("/clients");
+        const routeKey = normalizeTextForMatch(route);
+        clients = (allPayload.clients || []).filter(
+            (client) => normalizeTextForMatch(client.route) === routeKey
+        );
+    }
+
+    state.adjustClientsRaw = clients;
     syncTransportFilterOptions();
     renderAdjustTable();
     setStatus(`Ruta ${route}: ${state.adjustClientsRaw.length} clientes cargados.`);
@@ -730,6 +768,9 @@ function changePage(nextPage) {
     if (nextPage === "graph") {
         renderGraph();
         renderSummary();
+    }
+    if (nextPage === "adjust" && refs.adjustRouteSelect.value) {
+        loadClientsByAdjustRoute().catch((error) => setStatus(`No se pudieron cargar clientes: ${error.message}`));
     }
 }
 
