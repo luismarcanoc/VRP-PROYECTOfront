@@ -78,7 +78,6 @@ const refs = {
     summaryLongest: document.getElementById("summary-longest"),
     summaryShortest: document.getElementById("summary-shortest"),
     summaryTotal: document.getElementById("summary-total"),
-    adjustModeDescription: document.getElementById("adjust-mode-description"),
     modeErrorsBtn: document.getElementById("mode-errors-btn"),
     modeRoutesBtn: document.getElementById("mode-routes-btn"),
     adjustRouteSelect: document.getElementById("adjust-route-select"),
@@ -261,13 +260,11 @@ function renderAdjustTable() {
 async function setAdjustMode(mode) {
     state.adjustMode = mode;
     if (mode === "errors") {
-        refs.adjustModeDescription.textContent = "Arreglo de errores: clientes con datos incompletos o revisar manualmente.";
         const payload = await apiGet("/errors");
         state.clientsInAdjustTable = payload.clients || [];
         renderAdjustTable();
         return;
     }
-    refs.adjustModeDescription.textContent = "Editar datos: selecciona una ruta para ver solo sus clientes.";
     state.clientsInAdjustTable = [];
     renderAdjustTable();
 }

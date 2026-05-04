@@ -131,30 +131,27 @@
     <main id="page-adjust" class="app-page app-inner-page">
         <section class="page-shell">
             <header class="section-hero">
-                <div style="display: flex; align-items: center; gap: 24px;">
-                    <div>
-                        <p class="menu-kicker">Modulo B</p>
-                        <h2>Ajustar datos</h2>
-                        <p>Corrige clientes con información incompleta y edita clientes por ruta.</p>
-                    </div>
-                    <div class="table-actions" style="margin-bottom:0;">
-                        <button id="mode-errors-btn" type="button">Arreglo de errores</button>
-                        <button id="mode-routes-btn" type="button">Editar datos</button>
-                    </div>
+                <div>
+                    <p class="menu-kicker">Modulo B</p>
+                    <h2>Ajustar datos</h2>
+                    <p>Corrige clientes con información incompleta y edita clientes por ruta.</p>
                 </div>
                 <button class="volver-menu" type="button" data-go-page="menu">Volver al menu principal</button>
             </header>
 
             <section class="edit-layout" style="grid-template-columns: 1fr;">
-                <article class="edit-card" style="max-width: 900px; margin: 0 auto;">
-                    <div class="edit-card-head">
-                        <h3>Clientes por ruta</h3>
+                <article class="edit-card" style="max-width: 1200px; margin: 0 auto;">
+                    <div class="compact-grid" style="grid-template-columns: 1fr auto; align-items: end; gap: 16px; margin-bottom: 16px;">
+                        <div class="field">
+                            <label for="adjust-route-select">Selecciona una ruta para editar</label>
+                            <select id="adjust-route-select"></select>
+                        </div>
+                        <div class="table-actions" style="display: flex; gap: 8px;">
+                            <button id="mode-errors-btn" type="button" class="menu-secondary-btn">Arreglo de errores</button>
+                            <button id="mode-routes-btn" type="button" class="menu-secondary-btn">Editar datos</button>
+                        </div>
                     </div>
-                    <div class="field">
-                        <label for="adjust-route-select">Selecciona una ruta</label>
-                        <select id="adjust-route-select"></select>
-                    </div>
-                    <div class="table-shell" style="max-height: 340px; overflow-y: auto;">
+                    <div class="table-shell" style="max-height: 50vh; overflow-y: auto;">
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -208,8 +205,6 @@
             </div>
         </section>
     </main>
-
-    <button class="floating-adjust-btn" type="button" data-go-page="adjust">Ajustar datos</button>
 
     <script src="script.js"></script>
 </body>
