@@ -584,6 +584,12 @@ button:focus-visible,
     overflow-y: auto;
 }
 
+.adjust-more-wrap {
+    display: flex;
+    justify-content: center;
+    padding-top: 12px;
+}
+
 .compact-grid--routes {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }

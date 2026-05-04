@@ -35,6 +35,10 @@ const state = {
         query: "",
         transport: "all"
     },
+    adjustPagination: {
+        pageSize: 50,
+        visible: 50
+    },
     loading: {
         activeRequests: 0
     },
@@ -93,6 +97,7 @@ const refs = {
     adjustSearchInput: document.getElementById("adjust-search-input"),
     adjustTransportFilter: document.getElementById("adjust-transport-filter"),
     adjustResultCount: document.getElementById("adjust-result-count"),
+    adjustShowMoreBtn: document.getElementById("adjust-show-more-btn"),
     adjustClientForm: document.getElementById("adjust-client-form"),
     adjustClientId: document.getElementById("adjust-client-id"),
     adjustClientName: document.getElementById("adjust-client-name"),
@@ -350,10 +355,13 @@ function renderAdjustTable() {
     if (!state.clientsInAdjustTable.length) {
         refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="4">Sin clientes para mostrar.</td></tr>`;
         if (refs.adjustResultCount) refs.adjustResultCount.textContent = "0 clientes";
+        refs.adjustShowMoreBtn.style.display = "none";
         return;
     }
-    if (refs.adjustResultCount) refs.adjustResultCount.textContent = `${state.clientsInAdjustTable.length} clientes`;
-    refs.adjustRouteTableBody.innerHTML = state.clientsInAdjustTable
+    const visibleCount = Math.min(state.adjustPagination.visible, state.clientsInAdjustTable.length);
+    const visibleClients = state.clientsInAdjustTable.slice(0, visibleCount);
+    if (refs.adjustResultCount) refs.adjustResultCount.textContent = `${visibleCount} de ${state.clientsInAdjustTable.length} clientes`;
+    refs.adjustRouteTableBody.innerHTML = visibleClients
         .map((client) => `
             <tr>
                 <td>${client.clientId}</td>
@@ -367,6 +375,10 @@ function renderAdjustTable() {
             </tr>
         `)
         .join("");
+
+    const hasMore = visibleCount < state.clientsInAdjustTable.length;
+    refs.adjustShowMoreBtn.style.display = hasMore ? "inline-flex" : "none";
+    refs.adjustShowMoreBtn.textContent = hasMore ? `Mostrar más (${Math.min(state.adjustPagination.pageSize, state.clientsInAdjustTable.length - visibleCount)})` : "Mostrar más";
 }
 
 function applyAdjustFilters() {
@@ -419,6 +431,7 @@ function syncTransportFilterOptions() {
 
 async function setAdjustMode(mode) {
     state.adjustMode = mode;
+    state.adjustPagination.visible = state.adjustPagination.pageSize;
     updateAdjustModeButtons();
     if (mode === "errors") {
         const payload = await apiGet("/errors");
@@ -434,6 +447,7 @@ async function setAdjustMode(mode) {
 async function loadClientsByAdjustRoute() {
     const route = refs.adjustRouteSelect.value;
     state.adjustMode = "routes";
+    state.adjustPagination.visible = state.adjustPagination.pageSize;
     updateAdjustModeButtons();
     if (!route) {
         state.adjustClientsRaw = [];
@@ -907,12 +921,18 @@ function bindEvents() {
     refs.modeErrorsBtn.addEventListener("click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
     refs.modeRoutesBtn.addEventListener("click", () => setAdjustMode("routes").catch((e) => setStatus(e.message)));
     refs.adjustRouteSelect.addEventListener("change", () => loadClientsByAdjustRoute().catch((e) => setStatus(e.message)));
+    refs.adjustShowMoreBtn.addEventListener("click", () => {
+        state.adjustPagination.visible += state.adjustPagination.pageSize;
+        renderAdjustTable();
+    });
     refs.adjustSearchInput.addEventListener("input", () => {
         state.adjustFilters.query = refs.adjustSearchInput.value || "";
+        state.adjustPagination.visible = state.adjustPagination.pageSize;
         renderAdjustTable();
     });
     refs.adjustTransportFilter.addEventListener("change", () => {
         state.adjustFilters.transport = refs.adjustTransportFilter.value || "all";
+        state.adjustPagination.visible = state.adjustPagination.pageSize;
         renderAdjustTable();
     });
     refs.adjustClientForm.addEventListener("submit", submitAdjustForm);
