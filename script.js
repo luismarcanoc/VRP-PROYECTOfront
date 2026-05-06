@@ -385,14 +385,16 @@ function renderMetrics() {
         refs.metricRoutes.textContent = String(validRoutes.length);
     }
 
-    // `metricAdjust`: clients WITHOUT a route assigned
+    // `metricAdjust`: clients WITHOUT a route assigned OR marked 'revisar manualmente'
     if (refs.metricAdjust) {
         const clients = state.clients || [];
-        const withoutRoute = clients.filter((c) => {
-            const r = c.route || c.ruta || c.routeId || c.assignedRoute || c.ruta_asignada || "";
-            return String(r || "").trim() === "";
+        const pattern = /revisar manualmente|revisar|revisar manual|manualmente/gi;
+        const withoutRouteOrReview = clients.filter((c) => {
+            const r = String(c.route || c.ruta || c.routeId || c.assignedRoute || c.ruta_asignada || "").trim();
+            if (r === "") return true;
+            return pattern.test(r);
         });
-        refs.metricAdjust.textContent = String(withoutRoute.length);
+        refs.metricAdjust.textContent = String(withoutRouteOrReview.length);
     }
 
     // Backwards-compatible small cards
