@@ -88,6 +88,9 @@ const refs = {
     metricNodes: document.getElementById("metric-nodes"),
     metricEdges: document.getElementById("metric-edges"),
     metricPriority: document.getElementById("metric-priority"),
+    metricClients: document.getElementById("metric-clients"),
+    metricRoutes: document.getElementById("metric-routes"),
+    metricAdjust: document.getElementById("metric-adjust"),
     summaryHub: document.getElementById("summary-hub"),
     summaryLongest: document.getElementById("summary-longest"),
     summaryShortest: document.getElementById("summary-shortest"),
@@ -283,13 +286,27 @@ async function loadInitialData() {
         return;
     }
     try {
-        const payload = await apiGet("/routes");
-        state.routes = payload.routes || [];
+        // Load routes and clients in parallel; clients used for metric counts and error detection
+        const [routesResp, clientsResp] = await Promise.allSettled([apiGet("/routes"), apiGet("/clients")]);
+
+        if (routesResp.status === "fulfilled") {
+            state.routes = routesResp.value.routes || [];
+        } else {
+            state.routes = [];
+            setStatus(`No se pudo cargar rutas: ${routesResp.reason?.message || routesResp.reason}`);
+        }
+
+        if (clientsResp.status === "fulfilled") {
+            state.clients = extractClients(clientsResp.value) || [];
+        } else {
+            state.clients = [];
+        }
+
         refreshRouteSelects();
         state.nodes = [];
         state.edges = [];
         state.sourceMode = "backend";
-        setStatus("Rutas cargadas desde backend. Selecciona una ruta y presiona Optimizar.");
+        setStatus("Datos iniciales cargados. Selecciona una ruta y presiona Optimizar.");
     } catch (error) {
         setStatus(`No se pudo conectar al backend: ${error.message}`);
     }
@@ -325,7 +342,8 @@ function applyOptimizedResult(result) {
 
 async function optimizeCurrentRoute() {
     const route = refs.graphRouteSelect.value;
-    const origin = String(refs.graphOriginInput.value || "").trim();
+    // origin forced to La Castellana, Caracas
+    const origin = "La Castellana, Caracas, Venezuela";
     if (!route) {
         setStatus("Selecciona una ruta para optimizar.");
         return;
@@ -357,6 +375,24 @@ function renderAll() {
 }
 
 function renderMetrics() {
+    // `metricClients`: total clients in DB
+    if (refs.metricClients) refs.metricClients.textContent = String((state.clients || []).length || 0);
+
+    // `metricRoutes`: count of routes excluding manual/review or 'todas las rutas'
+    if (refs.metricRoutes && Array.isArray(state.routes)) {
+        const excludedPattern = /revisar|manual|todas/gi;
+        const validRoutes = state.routes.filter((r) => !excludedPattern.test(String(r.route || "")));
+        refs.metricRoutes.textContent = String(validRoutes.length);
+    }
+
+    // `metricAdjust`: clients with missing or erroneous data
+    if (refs.metricAdjust) {
+        const clients = state.clients || [];
+        const bad = clients.filter(isClientBadData);
+        refs.metricAdjust.textContent = String(bad.length);
+    }
+
+    // Backwards-compatible small cards
     if (refs.metricNodes) refs.metricNodes.textContent = String(state.nodes.length);
     if (refs.metricEdges) refs.metricEdges.textContent = String(state.edges.length);
     if (refs.metricPriority) refs.metricPriority.textContent = String(
@@ -364,6 +400,16 @@ function renderMetrics() {
     );
     if (refs.nodesCount) refs.nodesCount.textContent = `${state.nodes.length} nodos`;
     if (refs.edgesCount) refs.edgesCount.textContent = `${state.edges.length} rutas`;
+}
+
+function isClientBadData(client) {
+    const name = String(client.name || client.nombre || client.nombre_o_razon_social || "").trim();
+    const address = String(client.address || client.direccion || "").trim();
+    const lat = Number(client.lat ?? client.latitude ?? client.y ?? NaN);
+    const lng = Number(client.lng ?? client.longitude ?? client.x ?? NaN);
+    if (!name || !address) return true;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+    return false;
 }
 
 function renderSelectOptions() {
@@ -1136,6 +1182,13 @@ function init() {
     bindEvents();
     bindGraphInteractions();
     updateAdjustModeButtons();
+    // Enforce fixed origin for Module A (La Castellana)
+    try {
+        if (refs.graphOriginInput) {
+            refs.graphOriginInput.value = "La Castellana, Caracas, Venezuela";
+            refs.graphOriginInput.disabled = true;
+        }
+    } catch (_) {}
     loadInitialData();
 }
 
