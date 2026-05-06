@@ -385,11 +385,14 @@ function renderMetrics() {
         refs.metricRoutes.textContent = String(validRoutes.length);
     }
 
-    // `metricAdjust`: clients with missing or erroneous data
+    // `metricAdjust`: clients WITHOUT a route assigned
     if (refs.metricAdjust) {
         const clients = state.clients || [];
-        const bad = clients.filter(isClientBadData);
-        refs.metricAdjust.textContent = String(bad.length);
+        const withoutRoute = clients.filter((c) => {
+            const r = c.route || c.ruta || c.routeId || c.assignedRoute || c.ruta_asignada || "";
+            return String(r || "").trim() === "";
+        });
+        refs.metricAdjust.textContent = String(withoutRoute.length);
     }
 
     // Backwards-compatible small cards
