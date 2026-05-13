@@ -540,13 +540,14 @@ button:focus-visible,
 }
 
 .graph-maintenance strong {
-    font-size: clamp(2rem, 5vw, 4rem);
+    font-size: clamp(1.45rem, 3vw, 2.4rem);
     font-family: "Arial Black", Arial, sans-serif;
     line-height: 1;
 }
 
 .graph-maintenance span {
     font-weight: 800;
+    font-size: 0.88rem;
     color: rgba(248, 243, 233, 0.82);
 }
 

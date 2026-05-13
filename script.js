@@ -79,7 +79,6 @@ const GRAPH_BOUNDS = {
 const refs = {
     pages: document.querySelectorAll(".app-page"),
     graphStage: document.getElementById("graph-stage"),
-    reloadBackend: document.getElementById("reload-backend"),
     graphRouteSelect: document.getElementById("graph-route-select"),
     graphOriginInput: document.getElementById("graph-origin-input"),
     optimizeRouteBtn: document.getElementById("optimize-route-btn"),
@@ -412,7 +411,7 @@ async function loadInitialData() {
         state.optimizedRoute = null;
         if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
         state.sourceMode = "backend";
-        setStatus("Datos iniciales cargados. Selecciona una ruta y presiona Optimizar.");
+        setStatus("Datos iniciales cargados. Selecciona una ruta y presiona Actualizar ruta.");
     } catch (error) {
         setStatus(`No se pudo conectar al backend: ${error.message}`);
     }
@@ -457,7 +456,7 @@ async function optimizeCurrentRoute() {
     const route = refs.graphRouteSelect.value;
     const origin = state.mapsConfig.origin || refs.graphOriginInput.value || "La Castellana, Caracas, Venezuela";
     if (!route) {
-        setStatus("Selecciona una ruta para optimizar.");
+        setStatus("Selecciona una ruta para actualizar.");
         return;
     }
     if (!state.mapsConfig.enabled) {
@@ -472,16 +471,16 @@ async function optimizeCurrentRoute() {
             body: JSON.stringify({ route, origin })
         });
         applyOptimizedResult(payload.optimized);
-        setStatus(`Ruta ${route} optimizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
+        setStatus(`Ruta ${route} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
     } catch (error) {
-        setStatus(`Error al optimizar: ${error.message}`);
+        setStatus(`Error al actualizar la ruta: ${error.message}`);
     }
 }
 
 function exportOptimizedRouteToGoogleMaps() {
     const url = state.optimizedRoute?.googleMapsUrl;
     if (!url) {
-        setStatus("Primero optimiza una ruta para generar el link de Google Maps.");
+        setStatus("Primero actualiza una ruta para generar el link de Google Maps.");
         return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
@@ -988,7 +987,7 @@ function renderGraph() {
         return;
     }
     if (!state.nodes.length) {
-        refs.graphStage.innerHTML = `<div class="empty-state">Selecciona una ruta y presiona Optimizar ruta.</div>`;
+        refs.graphStage.innerHTML = `<div class="empty-state">Selecciona una ruta y presiona Actualizar ruta.</div>`;
         return;
     }
     const positions = getNodePositions();
@@ -1324,7 +1323,6 @@ function bindEvents() {
         });
     });
 
-    bindIfExists(refs.reloadBackend, "click", loadInitialData);
     bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
     bindIfExists(refs.exportGoogleMapsBtn, "click", exportOptimizedRouteToGoogleMaps);
     bindIfExists(refs.graphRouteSelect, "change", () => {
