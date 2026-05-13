@@ -44,6 +44,17 @@ const state = {
     loading: {
         activeRequests: 0
     },
+    mapsConfig: {
+        loaded: false,
+        enabled: false,
+        browserApiKey: "",
+        origin: "La Castellana, Caracas, Venezuela",
+        missing: []
+    },
+    optimizedRoute: null,
+    googleMap: null,
+    googleMapLayers: [],
+    googleMapsScriptPromise: null,
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -72,6 +83,7 @@ const refs = {
     graphRouteSelect: document.getElementById("graph-route-select"),
     graphOriginInput: document.getElementById("graph-origin-input"),
     optimizeRouteBtn: document.getElementById("optimize-route-btn"),
+    exportGoogleMapsBtn: document.getElementById("export-google-maps-btn"),
     nodeForm: document.getElementById("node-form"),
     edgeForm: document.getElementById("edge-form"),
     nodeId: document.getElementById("node-id"),
@@ -255,6 +267,98 @@ async function fetchWithErrors(url, options) {
     return response.json();
 }
 
+async function loadMapsConfig() {
+    try {
+        const config = await fetchWithErrors(`${API_BASE}/maps-config`);
+        state.mapsConfig = {
+            loaded: true,
+            enabled: Boolean(config.enabled && config.browserApiKey),
+            browserApiKey: String(config.browserApiKey || ""),
+            origin: String(config.origin || "La Castellana, Caracas, Venezuela"),
+            missing: Array.isArray(config.missing) ? config.missing : []
+        };
+    } catch (error) {
+        state.mapsConfig = {
+            ...state.mapsConfig,
+            loaded: true,
+            enabled: false,
+            missing: ["endpoint /maps-config"]
+        };
+        setStatus(`Modulo de mapas en mantenimiento: ${error.message}`);
+    }
+
+    if (refs.graphOriginInput) {
+        refs.graphOriginInput.value = state.mapsConfig.origin || "La Castellana, Caracas, Venezuela";
+        refs.graphOriginInput.disabled = true;
+    }
+    renderGraph();
+}
+
+function loadGoogleMapsScript() {
+    if (window.google?.maps) return Promise.resolve();
+    if (state.googleMapsScriptPromise) return state.googleMapsScriptPromise;
+    if (!state.mapsConfig.browserApiKey) {
+        return Promise.reject(new Error("Falta GOOGLE_MAPS_BROWSER_API_KEY."));
+    }
+
+    state.googleMapsScriptPromise = new Promise((resolve, reject) => {
+        const callbackName = `initVrpGoogleMaps${Date.now()}`;
+        const script = document.createElement("script");
+        const params = new URLSearchParams({
+            key: state.mapsConfig.browserApiKey,
+            callback: callbackName,
+            loading: "async",
+            language: "es"
+        });
+
+        window[callbackName] = () => {
+            delete window[callbackName];
+            resolve();
+        };
+        script.onerror = () => {
+            delete window[callbackName];
+            reject(new Error("No se pudo cargar Maps JavaScript API."));
+        };
+        script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+        script.async = true;
+        document.head.appendChild(script);
+    });
+
+    return state.googleMapsScriptPromise;
+}
+
+function decodePolyline(encoded) {
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+    const coordinates = [];
+
+    while (index < encoded.length) {
+        let result = 0;
+        let shift = 0;
+        let byte = null;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+        result = 0;
+        shift = 0;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+        coordinates.push({ lat: lat / 1e5, lng: lng / 1e5 });
+    }
+
+    return coordinates;
+}
+
 function refreshRouteSelects() {
     const prevGraphValue = refs.graphRouteSelect.value;
     const prevAdjustValue = refs.adjustRouteSelect.value;
@@ -305,6 +409,8 @@ async function loadInitialData() {
         refreshRouteSelects();
         state.nodes = [];
         state.edges = [];
+        state.optimizedRoute = null;
+        if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
         state.sourceMode = "backend";
         setStatus("Datos iniciales cargados. Selecciona una ruta y presiona Optimizar.");
     } catch (error) {
@@ -315,7 +421,8 @@ async function loadInitialData() {
 }
 
 function applyOptimizedResult(result) {
-    const nodes = [{ id: "ORIGEN", name: "Centro distribucion", priority: 5 }];
+    state.optimizedRoute = result;
+    const nodes = [{ id: "ORIGEN", name: "Centro distribucion", priority: 5, address: result.origin }];
     const edges = [];
     let previousId = "ORIGEN";
 
@@ -324,28 +431,38 @@ function applyOptimizedResult(result) {
         nodes.push({
             id: nodeId,
             name: client.name || client.clientId,
-            priority: 3
+            priority: 3,
+            ...client
         });
         edges.push({
             id: `${previousId}__${nodeId}`,
             origin: previousId,
             destination: nodeId,
-            weight: Math.max(1, Math.round((client.legDistanceMeters || 0) / 1000))
+            weight: Math.max(1, Math.round((client.legDistanceMeters || 0) / 1000)),
+            distanceText: client.legDistanceText,
+            durationText: client.legDurationText
         });
         previousId = nodeId;
     });
 
     state.nodes = nodes;
     state.edges = edges;
+    if (refs.exportGoogleMapsBtn) {
+        refs.exportGoogleMapsBtn.disabled = !result.googleMapsUrl;
+    }
     renderAll();
 }
 
 async function optimizeCurrentRoute() {
     const route = refs.graphRouteSelect.value;
-    // origin forced to La Castellana, Caracas
-    const origin = "La Castellana, Caracas, Venezuela";
+    const origin = state.mapsConfig.origin || refs.graphOriginInput.value || "La Castellana, Caracas, Venezuela";
     if (!route) {
         setStatus("Selecciona una ruta para optimizar.");
+        return;
+    }
+    if (!state.mapsConfig.enabled) {
+        renderGraph();
+        setStatus("Modulo de mapas en mantenimiento: faltan claves de Google Maps.");
         return;
     }
 
@@ -355,10 +472,19 @@ async function optimizeCurrentRoute() {
             body: JSON.stringify({ route, origin })
         });
         applyOptimizedResult(payload.optimized);
-        setStatus(`Ruta ${route} optimizada con distancia total aprox ${payload.optimized.totalDistanceKm} km.`);
+        setStatus(`Ruta ${route} optimizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
     } catch (error) {
         setStatus(`Error al optimizar: ${error.message}`);
     }
+}
+
+function exportOptimizedRouteToGoogleMaps() {
+    const url = state.optimizedRoute?.googleMapsUrl;
+    if (!url) {
+        setStatus("Primero optimiza una ruta para generar el link de Google Maps.");
+        return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function getNodeById(nodeId) {
@@ -777,9 +903,92 @@ function getNodePositions() {
     return positions;
 }
 
+function renderMaintenanceGraph() {
+    const missing = state.mapsConfig.missing?.length ? `Falta: ${state.mapsConfig.missing.join(", ")}` : "Esperando configuracion de Google Maps.";
+    refs.graphStage.innerHTML = `
+        <div class="graph-maintenance" role="status">
+            <div>
+                <strong>En mantenimiento...</strong>
+                <span>${missing}</span>
+            </div>
+        </div>
+    `;
+    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+}
+
+function clearGoogleMapLayers() {
+    state.googleMapLayers.forEach((layer) => layer.setMap(null));
+    state.googleMapLayers = [];
+}
+
+async function renderGoogleRouteMap() {
+    if (!state.optimizedRoute?.polyline) return;
+    try {
+        await loadGoogleMapsScript();
+        const mapEl = document.getElementById("google-route-map");
+        if (!mapEl) return;
+        const path = decodePolyline(state.optimizedRoute.polyline);
+        if (!path.length) return;
+
+        const map = new google.maps.Map(mapEl, {
+            center: path[0],
+            zoom: 12,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true
+        });
+        state.googleMap = map;
+        clearGoogleMapLayers();
+
+        const bounds = new google.maps.LatLngBounds();
+        path.forEach((point) => bounds.extend(point));
+
+        const routeLine = new google.maps.Polyline({
+            path,
+            geodesic: true,
+            strokeColor: "#c06e32",
+            strokeOpacity: 0.95,
+            strokeWeight: 6,
+            map
+        });
+        state.googleMapLayers.push(routeLine);
+
+        const originMarker = new google.maps.Marker({
+            position: path[0],
+            map,
+            label: "S",
+            title: state.optimizedRoute.origin || "Salida"
+        });
+        state.googleMapLayers.push(originMarker);
+
+        const destinationMarker = new google.maps.Marker({
+            position: path[path.length - 1],
+            map,
+            label: "F",
+            title: "Ultima parada"
+        });
+        state.googleMapLayers.push(destinationMarker);
+
+        map.fitBounds(bounds);
+    } catch (error) {
+        setStatus(`No se pudo mostrar el mapa: ${error.message}`);
+    }
+}
+
 function renderGraph() {
+    if (!state.mapsConfig.enabled) {
+        renderMaintenanceGraph();
+        return;
+    }
+    if (state.optimizedRoute?.polyline) {
+        refs.graphStage.innerHTML = `
+            <div id="google-route-map" class="google-route-map" aria-label="Mapa optimizado de Google Maps"></div>
+        `;
+        renderGoogleRouteMap();
+        return;
+    }
     if (!state.nodes.length) {
-        refs.graphStage.innerHTML = `<div class="empty-state">No hay nodos para visualizar.</div>`;
+        refs.graphStage.innerHTML = `<div class="empty-state">Selecciona una ruta y presiona Optimizar ruta.</div>`;
         return;
     }
     const positions = getNodePositions();
@@ -952,6 +1161,13 @@ function bindGraphInteractions() {
 
 function renderSummary() {
     if (!refs.summaryHub || !refs.summaryShortest || !refs.summaryLongest || !refs.summaryTotal) return;
+    if (state.optimizedRoute) {
+        refs.summaryHub.textContent = state.optimizedRoute.origin || "-";
+        refs.summaryLongest.textContent = state.optimizedRoute.totalDurationText || "-";
+        refs.summaryShortest.textContent = `${state.optimizedRoute.totalDistanceKm || 0} km`;
+        refs.summaryTotal.textContent = String(state.optimizedRoute.totalClients || 0);
+        return;
+    }
     const plantNode = state.nodes.reduce((best, node) => {
         if (!best) return node;
         return node.priority > best.priority ? node : best;
@@ -1110,6 +1326,14 @@ function bindEvents() {
 
     bindIfExists(refs.reloadBackend, "click", loadInitialData);
     bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
+    bindIfExists(refs.exportGoogleMapsBtn, "click", exportOptimizedRouteToGoogleMaps);
+    bindIfExists(refs.graphRouteSelect, "change", () => {
+        state.optimizedRoute = null;
+        state.nodes = [];
+        state.edges = [];
+        if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+        renderAll();
+    });
     bindIfExists(refs.nodeForm, "submit", handleNodeSubmit);
     bindIfExists(refs.edgeForm, "submit", handleEdgeSubmit);
     bindIfExists(refs.modeErrorsBtn, "click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
@@ -1187,13 +1411,7 @@ function init() {
     bindEvents();
     bindGraphInteractions();
     updateAdjustModeButtons();
-    // Enforce fixed origin for Module A (La Castellana)
-    try {
-        if (refs.graphOriginInput) {
-            refs.graphOriginInput.value = "La Castellana, Caracas, Venezuela";
-            refs.graphOriginInput.disabled = true;
-        }
-    } catch (_) {}
+    loadMapsConfig();
     loadInitialData();
 }
 
@@ -1202,4 +1420,3 @@ if (document.readyState === "loading") {
 } else {
     init();
 }
-

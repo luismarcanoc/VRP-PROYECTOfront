@@ -461,6 +461,13 @@ button:focus-visible,
     margin-bottom: 14px;
 }
 
+.graph-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .graph-card h3,
 .edit-card h3 {
     margin: 0;
@@ -469,6 +476,7 @@ button:focus-visible,
 }
 
 .graph-stage {
+    position: relative;
     height: 560px;
     min-height: 560px;
     padding: 14px;
@@ -496,6 +504,50 @@ button:focus-visible,
             var(--pdt-grid) 28px,
             var(--pdt-grid) 29px
         );
+}
+
+.google-route-map {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.graph-maintenance {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.82)),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.05),
+            rgba(255, 255, 255, 0.05) 1px,
+            transparent 1px,
+            transparent 28px
+        );
+    color: var(--pdt-cream);
+    text-align: center;
+}
+
+.graph-maintenance div {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+}
+
+.graph-maintenance strong {
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-family: "Arial Black", Arial, sans-serif;
+    line-height: 1;
+}
+
+.graph-maintenance span {
+    font-weight: 800;
+    color: rgba(248, 243, 233, 0.82);
 }
 
 .graph-stage.is-dragging {

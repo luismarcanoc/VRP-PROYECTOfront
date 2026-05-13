@@ -83,7 +83,10 @@
                 <article class="graph-card graph-card--canvas">
                     <div class="graph-card-head">
                         <h3>Red de rutas</h3>
-                        <button id="reload-backend" class="menu-secondary-btn" type="button">Recargar backend</button>
+                        <div class="graph-actions">
+                            <button id="export-google-maps-btn" class="menu-secondary-btn" type="button" disabled>Exportar a Google Maps</button>
+                            <button id="reload-backend" class="menu-secondary-btn" type="button">Recargar backend</button>
+                        </div>
                     </div>
                     <div class="compact-grid compact-grid--routes">
                         <div class="field">
@@ -109,15 +112,15 @@
                             <strong id="summary-hub">-</strong>
                         </div>
                         <div class="summary-row">
-                            <span>Ruta mas larga</span>
+                            <span>Tiempo total</span>
                             <strong id="summary-longest">-</strong>
                         </div>
                         <div class="summary-row">
-                            <span>Ruta mas corta</span>
+                            <span>Distancia total</span>
                             <strong id="summary-shortest">-</strong>
                         </div>
                         <div class="summary-row">
-                            <span>Total de conexiones</span>
+                            <span>Total de paradas</span>
                             <strong id="summary-total">0</strong>
                         </div>
                     </div>
