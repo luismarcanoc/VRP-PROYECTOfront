@@ -20,6 +20,11 @@ function resolveApiBase() {
 
 const API_BASE = resolveApiBase();
 const ALL_ROUTES_VALUE = "__ALL_ROUTES__";
+const DISTRIBUTION_ORIGIN = {
+    name: "PDT Bello Campo",
+    fullName: "PDT Bello Campo (PDT)",
+    address: "Edificio Onnis, Avenida Francisco de Miranda, & Avenida Coromoto, Caracas 1060, Miranda, Venezuela"
+};
 
 const state = {
     currentPage: "menu",
@@ -48,7 +53,8 @@ const state = {
         loaded: false,
         enabled: false,
         browserApiKey: "",
-        origin: "La Castellana, Caracas, Venezuela",
+        origin: DISTRIBUTION_ORIGIN.address,
+        originName: DISTRIBUTION_ORIGIN.name,
         missing: []
     },
     optimizedRoute: null,
@@ -80,7 +86,6 @@ const refs = {
     pages: document.querySelectorAll(".app-page"),
     graphStage: document.getElementById("graph-stage"),
     graphRouteSelect: document.getElementById("graph-route-select"),
-    graphOriginInput: document.getElementById("graph-origin-input"),
     optimizeRouteBtn: document.getElementById("optimize-route-btn"),
     exportGoogleMapsBtn: document.getElementById("export-google-maps-btn"),
     nodeForm: document.getElementById("node-form"),
@@ -273,7 +278,8 @@ async function loadMapsConfig() {
             loaded: true,
             enabled: Boolean(config.enabled && config.browserApiKey),
             browserApiKey: String(config.browserApiKey || ""),
-            origin: String(config.origin || "La Castellana, Caracas, Venezuela"),
+            origin: String(config.origin || DISTRIBUTION_ORIGIN.address),
+            originName: String(config.originName || DISTRIBUTION_ORIGIN.name),
             missing: Array.isArray(config.missing) ? config.missing : []
         };
     } catch (error) {
@@ -285,12 +291,8 @@ async function loadMapsConfig() {
         };
         setStatus(`Modulo de mapas en mantenimiento: ${error.message}`);
     }
-
-    if (refs.graphOriginInput) {
-        refs.graphOriginInput.value = state.mapsConfig.origin || "La Castellana, Caracas, Venezuela";
-        refs.graphOriginInput.disabled = true;
-    }
     renderGraph();
+    renderSummary();
 }
 
 function loadGoogleMapsScript() {
@@ -421,7 +423,7 @@ async function loadInitialData() {
 
 function applyOptimizedResult(result) {
     state.optimizedRoute = result;
-    const nodes = [{ id: "ORIGEN", name: "Centro distribucion", priority: 5, address: result.origin }];
+    const nodes = [{ id: "ORIGEN", name: DISTRIBUTION_ORIGIN.name, priority: 5, address: result.origin }];
     const edges = [];
     let previousId = "ORIGEN";
 
@@ -454,7 +456,7 @@ function applyOptimizedResult(result) {
 
 async function optimizeCurrentRoute() {
     const route = refs.graphRouteSelect.value;
-    const origin = state.mapsConfig.origin || refs.graphOriginInput.value || "La Castellana, Caracas, Venezuela";
+    const origin = state.mapsConfig.origin || DISTRIBUTION_ORIGIN.address;
     if (!route) {
         setStatus("Selecciona una ruta para actualizar.");
         return;
@@ -956,7 +958,7 @@ async function renderGoogleRouteMap() {
             position: path[0],
             map,
             label: "S",
-            title: state.optimizedRoute.origin || "Salida"
+            title: state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name
         });
         state.googleMapLayers.push(originMarker);
 
@@ -1161,7 +1163,7 @@ function bindGraphInteractions() {
 function renderSummary() {
     if (!refs.summaryHub || !refs.summaryShortest || !refs.summaryLongest || !refs.summaryTotal) return;
     if (state.optimizedRoute) {
-        refs.summaryHub.textContent = state.optimizedRoute.origin || "-";
+        refs.summaryHub.textContent = state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name;
         refs.summaryLongest.textContent = state.optimizedRoute.totalDurationText || "-";
         refs.summaryShortest.textContent = `${state.optimizedRoute.totalDistanceKm || 0} km`;
         refs.summaryTotal.textContent = String(state.optimizedRoute.totalClients || 0);
@@ -1176,7 +1178,7 @@ function renderSummary() {
     const shortest = sortedEdges[0];
     const longest = sortedEdges[sortedEdges.length - 1];
 
-    refs.summaryHub.textContent = plantNode ? `${plantNode.name} (${plantNode.id})` : "-";
+    refs.summaryHub.textContent = state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name;
     refs.summaryShortest.textContent = shortest ? `${shortest.origin} -> ${shortest.destination} (${shortest.weight})` : "-";
     refs.summaryLongest.textContent = longest ? `${longest.origin} -> ${longest.destination} (${longest.weight})` : "-";
     refs.summaryTotal.textContent = String(state.edges.length);
