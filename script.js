@@ -484,6 +484,66 @@ function applyOptimizedResult(result) {
     renderAll();
 }
 
+function applyGraphClients(route, clients) {
+    const nodes = [{
+        id: "ORIGEN",
+        name: state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name,
+        priority: 5,
+        address: state.mapsConfig.origin || DISTRIBUTION_ORIGIN.address,
+        route
+    }];
+    const edges = [];
+    let previousId = "ORIGEN";
+
+    clients.forEach((client, index) => {
+        const nodeId = `C${String(index + 1).padStart(3, "0")}`;
+        nodes.push({
+            id: nodeId,
+            name: client.nombre_o_razon_social || client.name || client.clientId,
+            priority: 3,
+            ...client
+        });
+        edges.push({
+            id: `${previousId}__${nodeId}`,
+            origin: previousId,
+            destination: nodeId,
+            weight: index + 1,
+            distanceText: "Pendiente",
+            durationText: "Pendiente"
+        });
+        previousId = nodeId;
+    });
+
+    state.nodes = nodes;
+    state.edges = edges;
+    state.optimizedRoute = null;
+    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    renderAll();
+}
+
+async function loadGraphClientsForRoute() {
+    const route = refs.graphRouteSelect.value;
+    state.optimizedRoute = null;
+    state.nodes = [];
+    state.edges = [];
+    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    if (!route) {
+        renderAll();
+        setStatus("Selecciona una ruta para cargar sus direcciones.");
+        return;
+    }
+
+    try {
+        const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
+        const clients = extractClients(payload).filter((client) => String(client.address || "").trim());
+        applyGraphClients(route, clients);
+        setStatus(`${getRouteDisplay(route)}: ${clients.length} direcciones cargadas desde la hoja de ruta.`);
+    } catch (error) {
+        renderAll();
+        setStatus(`Error cargando direcciones de la ruta: ${error.message}`);
+    }
+}
+
 async function optimizeCurrentRoute() {
     const route = refs.graphRouteSelect.value;
     const origin = state.mapsConfig.origin || DISTRIBUTION_ORIGIN.address;
@@ -1376,13 +1436,7 @@ function bindEvents() {
 
     bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
     bindIfExists(refs.exportGoogleMapsBtn, "click", exportOptimizedRouteToGoogleMaps);
-    bindIfExists(refs.graphRouteSelect, "change", () => {
-        state.optimizedRoute = null;
-        state.nodes = [];
-        state.edges = [];
-        if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
-        renderAll();
-    });
+    bindIfExists(refs.graphRouteSelect, "change", () => loadGraphClientsForRoute());
     bindIfExists(refs.nodeForm, "submit", handleNodeSubmit);
     bindIfExists(refs.edgeForm, "submit", handleEdgeSubmit);
     bindIfExists(refs.modeErrorsBtn, "click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
