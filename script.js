@@ -191,6 +191,29 @@ function normalizeTextForMatch(value) {
         .toLowerCase();
 }
 
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function truncateText(value, maxLength = 24) {
+    const text = String(value || "").trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function getClientProductSummary(client) {
+    const detail = Array.isArray(client?.detail) ? client.detail : [];
+    const total = detail.reduce((sum, item) => sum + toNumber(item.cantidad, 0), 0);
+    const uniqueProducts = new Set(detail.map((item) => String(item.producto || "").trim()).filter(Boolean));
+    if (!detail.length) return "Sin detalle de productos";
+    return `${total} unidades en ${uniqueProducts.size || detail.length} producto${(uniqueProducts.size || detail.length) === 1 ? "" : "s"}`;
+}
+
 function normalizeId(value) {
     return String(value || "")
         .trim()
@@ -470,6 +493,7 @@ function applyOptimizedResult(result) {
             origin: previousId,
             destination: nodeId,
             weight: Math.max(1, Math.round((client.legDistanceMeters || 0) / 1000)),
+            metricValue: Number(client.legDistanceMeters || 0),
             distanceText: client.legDistanceText,
             durationText: client.legDurationText
         });
@@ -508,6 +532,7 @@ function applyGraphClients(route, clients) {
             origin: previousId,
             destination: nodeId,
             weight: index + 1,
+            metricValue: index + 1,
             distanceText: "Pendiente",
             durationText: "Pendiente"
         });
@@ -979,23 +1004,21 @@ function renderEdgesTable() {
 }
 
 function getNodePositions() {
-    const centerX = GRAPH_BOUNDS.width / 2;
-    const centerY = GRAPH_BOUNDS.height / 2;
-    const radius = 170;
     const total = state.nodes.length || 1;
     const positions = new Map();
+    if (total === 1) {
+        positions.set(state.nodes[0].id, { x: GRAPH_BOUNDS.width / 2, y: GRAPH_BOUNDS.height / 2 });
+        return positions;
+    }
 
     state.nodes.forEach((node, index) => {
-        if (index === 0) {
-            positions.set(node.id, { x: centerX, y: centerY });
-            return;
-        }
-
-        const angle = ((index - 1) / Math.max(total - 1, 1)) * Math.PI * 2 - Math.PI / 2;
-        positions.set(node.id, {
-            x: centerX + Math.cos(angle) * radius,
-            y: centerY + Math.sin(angle) * radius
-        });
+        const left = 76;
+        const right = GRAPH_BOUNDS.width - 76;
+        const x = left + ((right - left) * index) / Math.max(total - 1, 1);
+        const y = index === 0
+            ? GRAPH_BOUNDS.height / 2
+            : (index % 2 === 1 ? 132 : GRAPH_BOUNDS.height - 132);
+        positions.set(node.id, { x, y });
     });
 
     return positions;
@@ -1086,15 +1109,8 @@ async function renderGoogleRouteMap() {
 }
 
 function renderGraph() {
-    if (!state.mapsConfig.enabled) {
+    if (!state.mapsConfig.enabled && !state.nodes.length) {
         renderMaintenanceGraph();
-        return;
-    }
-    if (state.optimizedRoute?.polyline) {
-        refs.graphStage.innerHTML = `
-            <div id="google-route-map" class="google-route-map" aria-label="Mapa optimizado de Google Maps"></div>
-        `;
-        renderGoogleRouteMap();
         return;
     }
     if (!state.nodes.length) {
@@ -1102,8 +1118,8 @@ function renderGraph() {
         return;
     }
     const positions = getNodePositions();
-    const maxWeight = state.edges.reduce((max, edge) => Math.max(max, edge.weight), 1);
-    const minWeight = state.edges.reduce((min, edge) => Math.min(min, edge.weight), maxWeight);
+    const maxWeight = state.edges.reduce((max, edge) => Math.max(max, getEdgeMetric(edge)), 1);
+    const minWeight = state.edges.reduce((min, edge) => Math.min(min, getEdgeMetric(edge)), maxWeight);
     const edgesSvg = state.edges
         .map((edge) => {
             const origin = positions.get(edge.origin);
@@ -1111,14 +1127,17 @@ function renderGraph() {
             if (!origin || !destination) return "";
             const midX = (origin.x + destination.x) / 2;
             const midY = (origin.y + destination.y) / 2;
-            const edgeColor = getEdgeColor(edge.weight, minWeight, maxWeight);
+            const edgeColor = getEdgeColor(getEdgeMetric(edge), minWeight, maxWeight);
+            const edgeLabel = getEdgeLabel(edge);
             return `
                 <g>
                     <line x1="${origin.x}" y1="${origin.y}" x2="${destination.x}" y2="${destination.y}"
-                        stroke="${edgeColor}" stroke-width="4" stroke-linecap="round" />
-                    <text x="${midX}" y="${midY - 8}" fill="#5f4634" font-size="13" font-weight="700" text-anchor="middle">
-                        ${edge.weight}
-                    </text>
+                        stroke="${edgeColor}" stroke-width="5" stroke-linecap="round" />
+                    <g transform="translate(${midX} ${midY})">
+                        <rect x="-54" y="-20" width="108" height="38" rx="9" fill="rgba(255,255,255,0.92)" stroke="rgba(95,70,52,0.18)"></rect>
+                        <text x="0" y="-4" fill="#1f2937" font-size="12" font-weight="900" text-anchor="middle">${escapeHtml(edgeLabel.distance)}</text>
+                        <text x="0" y="12" fill="#5f4634" font-size="11" font-weight="800" text-anchor="middle">${escapeHtml(edgeLabel.duration)}</text>
+                    </g>
                 </g>
             `;
         })
@@ -1127,14 +1146,15 @@ function renderGraph() {
         .map((node) => {
             const position = positions.get(node.id);
             if (!position) return "";
-            const radius = 22 + (node.priority || 3) * 3;
+            const radius = node.id === "ORIGEN" ? 30 : 26;
+            const label = truncateText(node.nombre_o_razon_social || node.name || node.id, node.id === "ORIGEN" ? 18 : 24);
+            const labelY = position.y < GRAPH_BOUNDS.height / 2 ? position.y - radius - 12 : position.y + radius + 24;
             return `
                 <g class="graph-node" data-node-id="${node.id}">
                     <circle cx="${position.x}" cy="${position.y}" r="${radius}" fill="#fff8ed" stroke="#c06e32" stroke-width="3"></circle>
                     <circle cx="${position.x}" cy="${position.y}" r="${Math.max(8, radius - 12)}" fill="rgba(192,110,50,0.14)"></circle>
-                    <text x="${position.x}" y="${position.y + 5}" fill="#000000" font-size="13" font-weight="800" text-anchor="middle">
-                        ${node.nombre_o_razon_social || node.name || node.id}
-                    </text>
+                    <text x="${position.x}" y="${position.y + 5}" fill="#000000" font-size="13" font-weight="900" text-anchor="middle">${node.id === "ORIGEN" ? "PDT" : node.stopNumber || node.rowNumber || ""}</text>
+                    <text x="${position.x}" y="${labelY}" fill="#111111" font-size="12" font-weight="900" text-anchor="middle">${escapeHtml(label)}</text>
                 </g>
             `;
         })
@@ -1149,41 +1169,67 @@ function renderGraph() {
         <div id="graph-node-popup" class="modal" style="display:none;position:absolute;"></div>
     `;
     syncGraphViewportTransform();
-    // Bind hover para mostrar pop-up de detalles
+    bindGraphNodeHover();
+}
+
+function bindGraphNodeHover() {
     const svg = refs.graphStage.querySelector("svg");
     if (!svg) return;
-    svg.querySelectorAll('.graph-node').forEach((el) => {
-        el.addEventListener('mouseenter', (e) => {
-            const nodeId = el.getAttribute('data-node-id');
-            const node = state.nodes.find(n => n.id === nodeId);
+
+    svg.querySelectorAll(".graph-node").forEach((el) => {
+        el.addEventListener("mouseenter", (event) => {
+            const nodeId = el.getAttribute("data-node-id");
+            const node = state.nodes.find((item) => item.id === nodeId);
             if (!node) return;
-            const popup = document.getElementById('graph-node-popup');
-            popup.innerHTML = `<div class='modal-content' style='padding:18px 22px;max-width:320px;'>
-                <strong>${node.nombre_o_razon_social || node.name || node.id}</strong><br>
-                <span><b>Cliente:</b> ${node.clientId || node.id}</span><br>
-                <span><b>Dirección:</b> ${node.address || '-'}</span><br>
-                <span><b>Ruta:</b> ${node.route || '-'}</span><br>
-                <span><b>Transporte:</b> ${node.transport || node.tipo_transporte || '-'}</span>
+            const popup = document.getElementById("graph-node-popup");
+            popup.innerHTML = `<div class="graph-node-popup-card">
+                <strong>${escapeHtml(node.nombre_o_razon_social || node.name || node.id)}</strong>
+                <span><b>Cliente:</b> ${escapeHtml(node.clientId || node.id)}</span>
+                <span><b>Direccion:</b> ${escapeHtml(node.address || "-")}</span>
+                <span><b>Productos:</b> ${escapeHtml(getClientProductSummary(node))}</span>
+                <span><b>Transporte:</b> ${escapeHtml(node.transport || node.tipo_transporte || "-")}</span>
             </div>`;
-            popup.style.display = 'block';
-            popup.style.left = (e.clientX + 20) + 'px';
-            popup.style.top = (e.clientY - 20) + 'px';
+            popup.style.display = "block";
+            popup.style.left = `${event.clientX + 18}px`;
+            popup.style.top = `${event.clientY - 18}px`;
         });
-        el.addEventListener('mouseleave', () => {
-            const popup = document.getElementById('graph-node-popup');
-            popup.style.display = 'none';
+
+        el.addEventListener("mouseleave", () => {
+            const popup = document.getElementById("graph-node-popup");
+            popup.style.display = "none";
         });
     });
 }
 
 function getEdgeColor(weight, minWeight, maxWeight) {
     if (maxWeight === minWeight) {
-        return "rgb(180, 90, 80)";
+        return "rgb(37, 99, 235)";
     }
 
     const ratio = (weight - minWeight) / (maxWeight - minWeight);
-    const hue = 220 - (220 * ratio);
-    return `hsl(${hue}, 75%, 50%)`;
+    const start = { r: 37, g: 99, b: 235 };
+    const end = { r: 220, g: 38, b: 38 };
+    const r = Math.round(start.r + (end.r - start.r) * ratio);
+    const g = Math.round(start.g + (end.g - start.g) * ratio);
+    const b = Math.round(start.b + (end.b - start.b) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+function getEdgeMetric(edge) {
+    const metric = Number(edge.metricValue ?? 0);
+    if (Number.isFinite(metric) && metric > 0) return metric;
+    return Math.max(1, toNumber(edge.weight, 1));
+}
+
+function getEdgeLabel(edge) {
+    const meters = Number(edge.metricValue || 0);
+    const distance = Number.isFinite(meters) && meters > 0 && edge.distanceText !== "Pendiente"
+        ? `${(meters / 1000).toFixed(2)} km`
+        : "Sin km";
+    return {
+        distance,
+        duration: edge.durationText && edge.durationText !== "Pendiente" ? edge.durationText : "Sin tiempo"
+    };
 }
 
 function syncGraphViewportTransform() {

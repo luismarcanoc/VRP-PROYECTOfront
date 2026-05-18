@@ -562,6 +562,33 @@ button:focus-visible,
     overflow: visible;
 }
 
+.graph-node {
+    cursor: pointer;
+}
+
+.graph-node-popup-card {
+    width: min(320px, calc(100vw - 42px));
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(192, 110, 50, 0.28);
+    background: rgba(255, 252, 246, 0.98);
+    box-shadow: 0 14px 34px rgba(62, 42, 22, 0.22);
+    color: #2f241c;
+    display: grid;
+    gap: 7px;
+    font-size: 0.84rem;
+    line-height: 1.32;
+}
+
+.graph-node-popup-card strong {
+    font-size: 0.95rem;
+    color: #000;
+}
+
+.graph-node-popup-card span {
+    display: block;
+}
+
 .summary-list {
     display: grid;
     gap: 12px;
