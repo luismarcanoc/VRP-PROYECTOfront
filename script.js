@@ -145,6 +145,18 @@ function bindIfExists(element, eventName, handler, options) {
     element.addEventListener(eventName, handler, options);
 }
 
+function getRouteDisplay(routeValue) {
+    const route = String(routeValue || "").trim();
+    const found = (state.routes || []).find((item) => String(item.route || "") === route);
+    return found?.displayName || found?.routeName || route;
+}
+
+function getRouteOptionLabel(item) {
+    const name = item.displayName || item.routeName || item.route || "SIN RUTA";
+    const count = Number(item.totalClients || 0);
+    return `${name} (${count})`;
+}
+
 function setAdjustTableMessage(message) {
     const colspan = state.adjustMode === "errors" ? 5 : 4;
     refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="${colspan}">${message}</td></tr>`;
@@ -372,7 +384,7 @@ function refreshRouteSelects() {
     refs.adjustRouteSelect.add(new Option("Todas las rutas", ALL_ROUTES_VALUE));
 
     state.routes.forEach((item) => {
-        const label = `${item.route} (${item.totalClients})`;
+        const label = getRouteOptionLabel(item);
         refs.graphRouteSelect.add(new Option(label, item.route));
         refs.adjustRouteSelect.add(new Option(label, item.route));
     });
@@ -423,7 +435,12 @@ async function loadInitialData() {
 
 function applyOptimizedResult(result) {
     state.optimizedRoute = result;
-    const nodes = [{ id: "ORIGEN", name: DISTRIBUTION_ORIGIN.name, priority: 5, address: result.origin }];
+    const nodes = [{
+        id: "ORIGEN",
+        name: state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name,
+        priority: 5,
+        address: result.origin
+    }];
     const edges = [];
     let previousId = "ORIGEN";
 
@@ -473,7 +490,7 @@ async function optimizeCurrentRoute() {
             body: JSON.stringify({ route, origin })
         });
         applyOptimizedResult(payload.optimized);
-        setStatus(`Ruta ${route} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
+        setStatus(`Ruta ${getRouteDisplay(route)} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
     } catch (error) {
         setStatus(`Error al actualizar la ruta: ${error.message}`);
     }
@@ -633,6 +650,8 @@ function applyAdjustFilters() {
             client.name,
             client.address,
             client.route,
+            client.routeName,
+            client.routeDisplayName,
             client.transport
         ]
             .map((value) => String(value || "").toLowerCase())
@@ -720,7 +739,7 @@ async function loadClientsByAdjustRoute() {
     syncTransportFilterOptions();
     renderAdjustTable();
     if (refs.adjustTableShell) refs.adjustTableShell.scrollTop = 0;
-    setStatus(`Ruta ${route}: ${state.adjustClientsRaw.length} clientes cargados.`);
+    setStatus(`Ruta ${getRouteDisplay(route)}: ${state.adjustClientsRaw.length} clientes cargados.`);
 }
 
 function exportCurrentErrorsToXlsx() {
@@ -738,7 +757,7 @@ function exportCurrentErrorsToXlsx() {
         cliente: client.clientId || "",
         nombre_o_razon_social: client.nombre_o_razon_social || client.name || "",
         direccion: client.address || "",
-        ruta: client.route || "",
+        ruta: client.routeDisplayName || client.routeName || client.route || "",
         transporte: client.transport || "",
         error: getClientErrorLabel(client)
     }));
@@ -768,14 +787,19 @@ function fillAdjustFormByKey(encodedKey) {
 function populateAdjustModalSelects(client) {
     if (!refs.adjustClientRoute || !refs.adjustClientTransport) return;
 
-    const routeOptions = Array.from(
-        new Set(
-            [
-                ...(state.routes || []).map((item) => String(item.route || "").trim()),
-                String(client?.route || "").trim()
-            ].filter(Boolean)
-        )
-    ).sort((a, b) => a.localeCompare(b));
+    const routeOptions = [
+        ...(state.routes || []).map((item) => ({
+            value: String(item.route || "").trim(),
+            label: item.displayName || item.routeName || item.route
+        })),
+        {
+            value: String(client?.route || "").trim(),
+            label: client?.routeDisplayName || client?.routeName || client?.route
+        }
+    ].filter((item) => item.value);
+    const uniqueRouteOptions = Array.from(
+        new Map(routeOptions.map((item) => [item.value, item])).values()
+    ).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
 
     const transportOptions = Array.from(
         new Set(
@@ -787,8 +811,8 @@ function populateAdjustModalSelects(client) {
         )
     ).sort((a, b) => a.localeCompare(b));
 
-    refs.adjustClientRoute.innerHTML = routeOptions
-        .map((route) => `<option value="${route}">${route}</option>`)
+    refs.adjustClientRoute.innerHTML = uniqueRouteOptions
+        .map((route) => `<option value="${route.value}">${route.label}</option>`)
         .join("");
 
     refs.adjustClientTransport.innerHTML = [
@@ -969,6 +993,18 @@ async function renderGoogleRouteMap() {
             title: "Ultima parada"
         });
         state.googleMapLayers.push(destinationMarker);
+
+        (state.optimizedRoute.sequence || []).forEach((stop) => {
+            const location = stop.location;
+            if (!location || !Number.isFinite(Number(location.lat)) || !Number.isFinite(Number(location.lng))) return;
+            const marker = new google.maps.Marker({
+                position: { lat: Number(location.lat), lng: Number(location.lng) },
+                map,
+                label: String(stop.stopNumber || ""),
+                title: stop.nombre_o_razon_social || stop.name || `Parada ${stop.stopNumber}`
+            });
+            state.googleMapLayers.push(marker);
+        });
 
         map.fitBounds(bounds);
     } catch (error) {
