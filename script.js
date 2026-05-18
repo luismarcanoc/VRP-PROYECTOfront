@@ -562,14 +562,15 @@ async function loadGraphClientsForRoute() {
         const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
         const clients = extractClients(payload).filter((client) => String(client.address || "").trim());
         applyGraphClients(route, clients);
-        setStatus(`${getRouteDisplay(route)}: ${clients.length} direcciones cargadas desde la hoja de ruta.`);
+        setStatus(`${getRouteDisplay(route)}: ${clients.length} direcciones cargadas. Calculando distancias con Google Maps...`);
+        await optimizeCurrentRoute({ auto: true });
     } catch (error) {
         renderAll();
         setStatus(`Error cargando direcciones de la ruta: ${error.message}`);
     }
 }
 
-async function optimizeCurrentRoute() {
+async function optimizeCurrentRoute(options = {}) {
     const route = refs.graphRouteSelect.value;
     const origin = state.mapsConfig.origin || DISTRIBUTION_ORIGIN.address;
     if (!route) {
@@ -590,7 +591,8 @@ async function optimizeCurrentRoute() {
         applyOptimizedResult(payload.optimized);
         setStatus(`Ruta ${getRouteDisplay(route)} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
     } catch (error) {
-        setStatus(`Error al actualizar la ruta: ${error.message}`);
+        const prefix = options.auto ? "No se pudo calcular automaticamente" : "Error al actualizar la ruta";
+        setStatus(`${prefix}: ${error.message}`);
     }
 }
 
@@ -1166,7 +1168,7 @@ function renderGraph() {
                 ${nodesSvg}
             </g>
         </svg>
-        <div id="graph-node-popup" class="modal" style="display:none;position:absolute;"></div>
+        <div id="graph-node-popup" class="graph-node-popup" style="display:none;position:fixed;"></div>
     `;
     syncGraphViewportTransform();
     bindGraphNodeHover();
@@ -1225,10 +1227,10 @@ function getEdgeLabel(edge) {
     const meters = Number(edge.metricValue || 0);
     const distance = Number.isFinite(meters) && meters > 0 && edge.distanceText !== "Pendiente"
         ? `${(meters / 1000).toFixed(2)} km`
-        : "Sin km";
+        : "Calculando";
     return {
         distance,
-        duration: edge.durationText && edge.durationText !== "Pendiente" ? edge.durationText : "Sin tiempo"
+        duration: edge.durationText && edge.durationText !== "Pendiente" ? edge.durationText : "Google Maps"
     };
 }
 
@@ -1243,8 +1245,8 @@ function syncGraphViewportTransform() {
 
 function clampGraphPan() {
     const scale = state.graphView.scale;
-    const maxX = Math.max(0, (GRAPH_BOUNDS.width * (scale - 1)) / 2);
-    const maxY = Math.max(0, (GRAPH_BOUNDS.height * (scale - 1)) / 2);
+    const maxX = 420 + Math.max(0, (GRAPH_BOUNDS.width * (scale - 1)) / 2);
+    const maxY = 260 + Math.max(0, (GRAPH_BOUNDS.height * (scale - 1)) / 2);
     state.graphView.translateX = Math.min(maxX, Math.max(-maxX, state.graphView.translateX));
     state.graphView.translateY = Math.min(maxY, Math.max(-maxY, state.graphView.translateY));
 }
@@ -1279,6 +1281,7 @@ function bindGraphInteractions() {
 
     refs.graphStage.addEventListener("pointerdown", (event) => {
         if (!refs.graphStage.querySelector("svg")) return;
+        event.preventDefault();
         state.graphView.isDragging = true;
         state.graphView.dragStartX = event.clientX;
         state.graphView.dragStartY = event.clientY;
@@ -1290,6 +1293,7 @@ function bindGraphInteractions() {
 
     refs.graphStage.addEventListener("pointermove", (event) => {
         if (!state.graphView.isDragging) return;
+        event.preventDefault();
         const svg = refs.graphStage.querySelector("svg");
         if (!svg) return;
 
@@ -1324,19 +1328,10 @@ function renderSummary() {
         refs.summaryTotal.textContent = String(state.optimizedRoute.totalClients || 0);
         return;
     }
-    const plantNode = state.nodes.reduce((best, node) => {
-        if (!best) return node;
-        return node.priority > best.priority ? node : best;
-    }, null);
-
-    const sortedEdges = [...state.edges].sort((a, b) => a.weight - b.weight);
-    const shortest = sortedEdges[0];
-    const longest = sortedEdges[sortedEdges.length - 1];
-
     refs.summaryHub.textContent = state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name;
-    refs.summaryShortest.textContent = shortest ? `${shortest.origin} -> ${shortest.destination} (${shortest.weight})` : "-";
-    refs.summaryLongest.textContent = longest ? `${longest.origin} -> ${longest.destination} (${longest.weight})` : "-";
-    refs.summaryTotal.textContent = String(state.edges.length);
+    refs.summaryShortest.textContent = state.edges.length ? "Pendiente" : "-";
+    refs.summaryLongest.textContent = state.edges.length ? "Pendiente" : "-";
+    refs.summaryTotal.textContent = String(Math.max(0, state.nodes.length - 1));
 }
 
 function changePage(nextPage) {

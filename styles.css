@@ -485,6 +485,8 @@ button:focus-visible,
     overflow: hidden;
     cursor: grab;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -560,6 +562,14 @@ button:focus-visible,
     height: 100%;
     display: block;
     overflow: visible;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.graph-stage text {
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
 }
 
 .graph-node {
@@ -578,6 +588,11 @@ button:focus-visible,
     gap: 7px;
     font-size: 0.84rem;
     line-height: 1.32;
+}
+
+.graph-node-popup {
+    z-index: 1300;
+    pointer-events: none;
 }
 
 .graph-node-popup-card strong {
