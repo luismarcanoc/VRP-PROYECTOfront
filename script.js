@@ -74,6 +74,7 @@ const state = {
     googleMap: null,
     googleMapLayers: [],
     googleMapsScriptPromise: null,
+    graphCalculationError: "",
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -471,6 +472,7 @@ async function loadInitialData() {
 
 function applyOptimizedResult(result) {
     state.optimizedRoute = result;
+    state.graphCalculationError = "";
     const nodes = [{
         id: "ORIGEN",
         name: state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name,
@@ -509,6 +511,7 @@ function applyOptimizedResult(result) {
 }
 
 function applyGraphClients(route, clients) {
+    state.graphCalculationError = "";
     const nodes = [{
         id: "ORIGEN",
         name: state.mapsConfig.originName || DISTRIBUTION_ORIGIN.name,
@@ -546,9 +549,22 @@ function applyGraphClients(route, clients) {
     renderAll();
 }
 
+function markGraphCalculationError(message) {
+    state.graphCalculationError = message;
+    state.optimizedRoute = null;
+    state.edges = state.edges.map((edge) => ({
+        ...edge,
+        distanceText: "Error",
+        durationText: "Ver detalle"
+    }));
+    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    renderAll();
+}
+
 async function loadGraphClientsForRoute() {
     const route = refs.graphRouteSelect.value;
     state.optimizedRoute = null;
+    state.graphCalculationError = "";
     state.nodes = [];
     state.edges = [];
     if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
@@ -591,6 +607,7 @@ async function optimizeCurrentRoute(options = {}) {
         applyOptimizedResult(payload.optimized);
         setStatus(`Ruta ${getRouteDisplay(route)} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
     } catch (error) {
+        markGraphCalculationError(error.message);
         const prefix = options.auto ? "No se pudo calcular automaticamente" : "Error al actualizar la ruta";
         setStatus(`${prefix}: ${error.message}`);
     }
@@ -1161,6 +1178,9 @@ function renderGraph() {
             `;
         })
         .join("");
+    const errorHtml = state.graphCalculationError
+        ? `<div class="graph-error-banner">No se pudo calcular con Google Maps: ${escapeHtml(state.graphCalculationError)}</div>`
+        : "";
     refs.graphStage.innerHTML = `
         <svg viewBox="${-GRAPH_BOUNDS.paddingX} ${-GRAPH_BOUNDS.paddingY} ${GRAPH_BOUNDS.width + (GRAPH_BOUNDS.paddingX * 2)} ${GRAPH_BOUNDS.height + (GRAPH_BOUNDS.paddingY * 2)}" role="img" aria-label="Grafo de rutas de distribucion" preserveAspectRatio="xMidYMid meet">
             <g id="graph-viewport" transform="translate(${state.graphView.translateX} ${state.graphView.translateY}) scale(${state.graphView.scale})">
@@ -1168,6 +1188,7 @@ function renderGraph() {
                 ${nodesSvg}
             </g>
         </svg>
+        ${errorHtml}
         <div id="graph-node-popup" class="graph-node-popup" style="display:none;position:fixed;"></div>
     `;
     syncGraphViewportTransform();
@@ -1224,6 +1245,9 @@ function getEdgeMetric(edge) {
 }
 
 function getEdgeLabel(edge) {
+    if (edge.distanceText === "Error") {
+        return { distance: "Error", duration: "Ver detalle" };
+    }
     const meters = Number(edge.metricValue || 0);
     const distance = Number.isFinite(meters) && meters > 0 && edge.distanceText !== "Pendiente"
         ? `${(meters / 1000).toFixed(2)} km`
