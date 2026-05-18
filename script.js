@@ -1,21 +1,34 @@
-const FALLBACK_API_BASE = "https://vrp-proyectoback.onrender.com/api";
+const LOCAL_API_BASE = "http://localhost:10000/api";
+const REMOTE_API_BASE = "https://vrp-proyectoback.onrender.com/api";
 
 function resolveApiBase() {
     const queryApi = new URLSearchParams(window.location.search).get("api");
     const storedApi = window.localStorage.getItem("VRP_API_BASE") || "";
     const explicitApi = String(window.VRP_API_BASE || "").trim();
+    const isLocalFrontend = ["", "localhost", "127.0.0.1"].includes(window.location.hostname)
+        || window.location.protocol === "file:";
 
-    const chosen = explicitApi || queryApi || storedApi;
-    if (chosen) {
+    if (explicitApi || queryApi) {
+        const chosen = explicitApi || queryApi;
         window.localStorage.setItem("VRP_API_BASE", chosen);
         return chosen;
+    }
+
+    if (isLocalFrontend) {
+        const localChoice = !storedApi || storedApi.includes("onrender.com") ? LOCAL_API_BASE : storedApi;
+        window.localStorage.setItem("VRP_API_BASE", localChoice);
+        return localChoice;
+    }
+
+    if (storedApi) {
+        return storedApi;
     }
 
     if (window.location.hostname.includes("onrender.com")) {
         return `${window.location.origin}/api`;
     }
 
-    return FALLBACK_API_BASE;
+    return REMOTE_API_BASE;
 }
 
 const API_BASE = resolveApiBase();
