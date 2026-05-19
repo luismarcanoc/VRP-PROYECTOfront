@@ -357,6 +357,14 @@ body::before {
     justify-content: center;
 }
 
+.menu-actions--return {
+    margin-top: 20px;
+}
+
+.pdt-return-btn {
+    min-width: 210px;
+}
+
 .menu-primary-btn,
 .menu-secondary-btn,
 button,

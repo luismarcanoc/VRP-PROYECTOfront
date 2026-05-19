@@ -1,5 +1,6 @@
 const LOCAL_API_BASE = "http://localhost:10000/api";
 const REMOTE_API_BASE = "https://vrp-proyectoback.onrender.com/api";
+const REMOTE_PDT_MENU_URL = "https://prueba-empaquetadofrontend.vercel.app/#menu";
 
 function resolveApiBase() {
     const queryApi = new URLSearchParams(window.location.search).get("api");
@@ -32,6 +33,32 @@ function resolveApiBase() {
 }
 
 const API_BASE = resolveApiBase();
+
+function resolveMainMenuUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    const configured = String(window.PDT_MAIN_MENU_URL || "").trim();
+    const isLocalFrontend = ["", "localhost", "127.0.0.1"].includes(window.location.hostname)
+        || window.location.protocol === "file:";
+    const fallback = isLocalFrontend
+        ? "../PruebaEmpaqFront/PRUEBA_EMPAQUETADOfrontend/index.html#menu"
+        : REMOTE_PDT_MENU_URL;
+    const candidate = returnTo || configured || fallback;
+
+    try {
+        const url = new URL(candidate, window.location.href);
+        if (["http:", "https:", "file:"].includes(url.protocol)) {
+            return url.href;
+        }
+    } catch (_) {}
+
+    return new URL(fallback, window.location.href).href;
+}
+
+function openMainMenu() {
+    window.location.assign(resolveMainMenuUrl());
+}
+
 const ALL_ROUTES_VALUE = "__ALL_ROUTES__";
 const DISTRIBUTION_ORIGIN = {
     name: "PDT Bello Campo",
@@ -1497,6 +1524,9 @@ function bindEvents() {
         button.addEventListener("click", () => {
             changePage(button.dataset.goPage);
         });
+    });
+    document.querySelectorAll("[data-return-menu]").forEach((button) => {
+        button.addEventListener("click", openMainMenu);
     });
 
     bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
