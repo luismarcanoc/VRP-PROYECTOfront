@@ -1,6 +1,6 @@
 const LOCAL_API_BASE = "http://localhost:10000/api";
 const REMOTE_API_BASE = "https://vrp-proyectoback.onrender.com/api";
-const REMOTE_PDT_MENU_URL = "https://prueba-empaquetadofrontend.vercel.app/#menu";
+const REMOTE_PDT_MENU_URL = "https://prueba-empaquetad-ofrontend-theta.vercel.app/#menu";
 
 function resolveApiBase() {
     const queryApi = new URLSearchParams(window.location.search).get("api");
