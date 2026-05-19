@@ -73,6 +73,8 @@ const state = {
     selectedNodeId: "",
     sourceMode: "backend",
     routes: [],
+    totalClients: 0,
+    totalAdjust: 0,
     adjustMode: "none",
     selectedClientKey: "",
     clientsInAdjustTable: [],
@@ -87,7 +89,9 @@ const state = {
     },
     adjustReachedBottom: false,
     loading: {
-        activeRequests: 0
+        activeRequests: 0,
+        timer: null,
+        visible: false
     },
     mapsConfig: {
         loaded: false,
@@ -270,18 +274,24 @@ async function apiSend(pathname, options) {
     );
 }
 
-function showLoading(title, subtitle) {
+function showLoading() {
     if (!refs.loadingOverlay) return;
-    refs.loadingTitle.textContent = title || "Cargando datos...";
-    refs.loadingSubtitle.textContent = subtitle || "Consultando base de datos del backend. Espera un momento.";
+    refs.loadingTitle.textContent = "Cargando";
+    if (refs.loadingSubtitle) refs.loadingSubtitle.textContent = "";
     refs.loadingOverlay.classList.add("is-visible");
     refs.loadingOverlay.setAttribute("aria-busy", "true");
+    state.loading.visible = true;
 }
 
 function hideLoading() {
     if (!refs.loadingOverlay) return;
+    if (state.loading.timer) {
+        window.clearTimeout(state.loading.timer);
+        state.loading.timer = null;
+    }
     refs.loadingOverlay.classList.remove("is-visible");
     refs.loadingOverlay.setAttribute("aria-busy", "false");
+    state.loading.visible = false;
 }
 
 function getLoadingCopy(pathname, method) {
@@ -323,7 +333,12 @@ function getLoadingCopy(pathname, method) {
 
 async function withLoading(task, copy) {
     state.loading.activeRequests += 1;
-    showLoading(copy?.title, copy?.subtitle);
+    if (!state.loading.timer && !state.loading.visible) {
+        state.loading.timer = window.setTimeout(() => {
+            state.loading.timer = null;
+            if (state.loading.activeRequests > 0) showLoading();
+        }, 450);
+    }
     try {
         return await task();
     } finally {
@@ -467,21 +482,12 @@ async function loadInitialData() {
         return;
     }
     try {
-        // Load routes and clients in parallel; clients used for metric counts and error detection
-        const [routesResp, clientsResp] = await Promise.allSettled([apiGet("/routes"), apiGet("/clients")]);
-
-        if (routesResp.status === "fulfilled") {
-            state.routes = routesResp.value.routes || [];
-        } else {
-            state.routes = [];
-            setStatus(`No se pudo cargar rutas: ${routesResp.reason?.message || routesResp.reason}`);
-        }
-
-        if (clientsResp.status === "fulfilled") {
-            state.clients = extractClients(clientsResp.value) || [];
-        } else {
-            state.clients = [];
-        }
+        const routesPayload = await apiGet("/routes");
+        state.routes = routesPayload.routes || [];
+        state.totalClients = state.routes.reduce((sum, item) => sum + Number(item.totalClients || 0), 0);
+        state.totalAdjust = state.routes
+            .filter((item) => /revisar manualmente|revisar|manual|sin ruta/i.test(String(item.routeName || item.route || "")))
+            .reduce((sum, item) => sum + Number(item.totalClients || 0), 0);
 
         refreshRouteSelects();
         state.nodes = [];
@@ -663,8 +669,12 @@ function renderAll() {
 }
 
 function renderMetrics() {
-    // `metricClients`: total clients in DB
-    if (refs.metricClients) refs.metricClients.textContent = String((state.clients || []).length || 0);
+    const clients = state.clients || [];
+    const hasLoadedAllClients = clients.length > 0;
+
+    if (refs.metricClients) {
+        refs.metricClients.textContent = String(hasLoadedAllClients ? clients.length : state.totalClients || 0);
+    }
 
     // `metricRoutes`: count of routes excluding manual/review or 'todas las rutas'
     if (refs.metricRoutes && Array.isArray(state.routes)) {
@@ -675,14 +685,17 @@ function renderMetrics() {
 
     // `metricAdjust`: clients WITHOUT a route assigned OR marked 'revisar manualmente'
     if (refs.metricAdjust) {
-        const clients = state.clients || [];
-        const pattern = /revisar manualmente|revisar|revisar manual|manualmente/gi;
-        const withoutRouteOrReview = clients.filter((c) => {
-            const r = String(c.route || c.ruta || c.routeId || c.assignedRoute || c.ruta_asignada || "").trim();
-            if (r === "") return true;
-            return pattern.test(r);
-        });
-        refs.metricAdjust.textContent = String(withoutRouteOrReview.length);
+        if (hasLoadedAllClients) {
+            const pattern = /revisar manualmente|revisar|revisar manual|manualmente/gi;
+            const withoutRouteOrReview = clients.filter((c) => {
+                const r = String(c.route || c.ruta || c.routeId || c.assignedRoute || c.ruta_asignada || "").trim();
+                if (r === "") return true;
+                return pattern.test(r);
+            });
+            refs.metricAdjust.textContent = String(withoutRouteOrReview.length);
+        } else {
+            refs.metricAdjust.textContent = String(state.totalAdjust || 0);
+        }
     }
 
     // Backwards-compatible small cards
@@ -863,6 +876,7 @@ async function loadClientsByAdjustRoute() {
     if (route === ALL_ROUTES_VALUE) {
         const payload = await apiGet("/clients");
         clients = extractClients(payload);
+        state.clients = clients;
     } else {
         const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
         clients = extractClients(payload);
