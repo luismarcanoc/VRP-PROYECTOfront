@@ -6,13 +6,18 @@ Frontend de visualizacion y ajuste de rutas.
 
 En `script.js` existe:
 
-- `window.VRP_API_BASE` (si quieres inyectarlo desde HTML)
-- fallback: `https://TU-BACKEND.onrender.com/api`
+- `window.VRP_API_BASE` (para inyectar la URL publica del backend desde HTML)
+- `?api=https://tu-backend.example.com/api` (sobrescribe la URL y la guarda localmente)
+- fallback productivo: `https://vrp-proyectoback.onrender.com/api`
+- fallback local: `http://localhost:10000/api`
 
-Debes reemplazar `TU-BACKEND` por tu servicio real en Render.
+La variable `DATABASE_URL` y cualquier `ADMIN_KEY` pertenecen solo al backend. Nunca deben configurarse ni publicarse en este frontend.
 
 ## Flujo
 
-- Frontend consume endpoints del backend en Render.
-- Backend lee/escribe datos en Neon.
+- Frontend consume endpoints HTTP del backend desplegado.
+- Backend lee/escribe datos en la base PostgreSQL central.
 - Optimizacion usa Google Maps desde backend.
+
+Si cambia el dominio publico del servicio backend, actualiza `REMOTE_API_BASE` en `script.js`
+o configura `window.VRP_API_BASE` antes de cargar `script.js`.
