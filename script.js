@@ -106,6 +106,13 @@ const state = {
     googleMapLayers: [],
     googleMapsScriptPromise: null,
     graphCalculationError: "",
+    mobile: {
+        active: false,
+        view: "route",
+        clients: [],
+        selectedClientKey: "",
+        sheetUnlocked: false
+    },
     graphView: {
         scale: 1,
         minScale: 0.65,
@@ -133,6 +140,29 @@ const refs = {
     graphRouteSelect: document.getElementById("graph-route-select"),
     optimizeRouteBtn: document.getElementById("optimize-route-btn"),
     exportGoogleMapsBtn: document.getElementById("export-google-maps-btn"),
+    desktopGraphSlot: document.getElementById("desktop-graph-slot"),
+    mobileGraphSlot: document.getElementById("mobile-graph-slot"),
+    mobileDriverApp: document.getElementById("mobile-driver-app"),
+    mobileRouteView: document.getElementById("mobile-route-view"),
+    mobileSheetView: document.getElementById("mobile-sheet-view"),
+    mobileDetailView: document.getElementById("mobile-detail-view"),
+    mobileRouteSelect: document.getElementById("mobile-route-select"),
+    mobileOptimizeRouteBtn: document.getElementById("mobile-optimize-route-btn"),
+    mobileExportGoogleMapsBtn: document.getElementById("mobile-export-google-maps-btn"),
+    mobileOpenSheetBtn: document.getElementById("mobile-open-sheet-btn"),
+    mobileSheetBackBtn: document.getElementById("mobile-sheet-back-btn"),
+    mobileDetailBackBtn: document.getElementById("mobile-detail-back-btn"),
+    mobileDeliveredBtn: document.getElementById("mobile-delivered-btn"),
+    mobileRoutePlate: document.getElementById("mobile-route-plate"),
+    mobileRouteName: document.getElementById("mobile-route-name"),
+    mobileSheetPlate: document.getElementById("mobile-sheet-plate"),
+    mobileSheetRoute: document.getElementById("mobile-sheet-route"),
+    mobileSelectedTitle: document.getElementById("mobile-selected-title"),
+    mobileClientList: document.getElementById("mobile-client-list"),
+    mobileDetailClient: document.getElementById("mobile-detail-client"),
+    mobileProductsList: document.getElementById("mobile-products-list"),
+    mobileGraphZoomIn: document.getElementById("mobile-graph-zoom-in"),
+    mobileGraphZoomOut: document.getElementById("mobile-graph-zoom-out"),
     nodeForm: document.getElementById("node-form"),
     edgeForm: document.getElementById("edge-form"),
     nodeId: document.getElementById("node-id"),
@@ -202,6 +232,42 @@ function getRouteOptionLabel(item) {
     return `${name} (${count})`;
 }
 
+function isMobileDriverDevice() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mobile") === "1") return true;
+    if (params.get("mobile") === "0") return false;
+    const agentMobile = Boolean(navigator.userAgentData?.mobile)
+        || /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return agentMobile || (window.matchMedia("(max-width: 760px)").matches && navigator.maxTouchPoints > 0);
+}
+
+function getSelectedRouteInfo() {
+    const value = refs.graphRouteSelect?.value || refs.mobileRouteSelect?.value || "";
+    return state.routes.find((item) => String(item.route || "") === value) || null;
+}
+
+function getMobileRouteShortName(routeInfo) {
+    return String(routeInfo?.routeName || routeInfo?.displayName || "-").trim() || "-";
+}
+
+function syncMobileRouteHeader() {
+    const routeInfo = getSelectedRouteInfo();
+    const plate = String(routeInfo?.truck || "-").trim() || "-";
+    const routeName = getMobileRouteShortName(routeInfo);
+    if (refs.mobileRoutePlate) refs.mobileRoutePlate.textContent = plate;
+    if (refs.mobileSheetPlate) refs.mobileSheetPlate.textContent = plate;
+    if (refs.mobileRouteName) refs.mobileRouteName.textContent = routeName;
+    if (refs.mobileSheetRoute) refs.mobileSheetRoute.textContent = routeName;
+    if (refs.mobileSelectedTitle) {
+        refs.mobileSelectedTitle.textContent = routeInfo?.displayName || routeInfo?.routeName || "Selecciona una ruta";
+    }
+}
+
+function setExportButtonsDisabled(disabled) {
+    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = disabled;
+    if (refs.mobileExportGoogleMapsBtn) refs.mobileExportGoogleMapsBtn.disabled = disabled;
+}
+
 function setAdjustTableMessage(message) {
     const colspan = state.adjustMode === "errors" ? 5 : 4;
     refs.adjustRouteTableBody.innerHTML = `<tr><td colspan="${colspan}">${message}</td></tr>`;
@@ -244,6 +310,28 @@ function getClientProductSummary(client) {
     const uniqueProducts = new Set(detail.map((item) => String(item.producto || "").trim()).filter(Boolean));
     if (!detail.length) return "Sin detalle de productos";
     return `${total} unidades en ${uniqueProducts.size || detail.length} producto${(uniqueProducts.size || detail.length) === 1 ? "" : "s"}`;
+}
+
+function getProductName(item) {
+    return String(
+        item?.producto
+        || item?.nombre_producto
+        || item?.nombre
+        || item?.descripcion
+        || item?.descripcion_producto
+        || "Producto"
+    ).trim();
+}
+
+function getProductQuantity(item) {
+    return toNumber(
+        item?.cantidad ?? item?.cantidad_producto ?? item?.unidades ?? item?.qty,
+        0
+    );
+}
+
+function getClientBaskets(client) {
+    return Math.max(0, toNumber(client?.baskets ?? client?.cantidad_cestas ?? client?.cestas, 0));
 }
 
 function normalizeId(value) {
@@ -323,6 +411,12 @@ function getLoadingCopy(pathname, method) {
         return {
             title: "Guardando cambios...",
             subtitle: "Actualizando cliente en backend y sincronizando datos."
+        };
+    }
+    if (pathname.includes("/deliveries/") && method === "PUT") {
+        return {
+            title: "Confirmando entrega...",
+            subtitle: "Guardando el estado de la parada."
         };
     }
     return {
@@ -454,18 +548,22 @@ function decodePolyline(encoded) {
 function refreshRouteSelects() {
     const prevGraphValue = refs.graphRouteSelect.value;
     const prevAdjustValue = refs.adjustRouteSelect.value;
+    const prevMobileValue = refs.mobileRouteSelect?.value || prevGraphValue;
 
     refs.graphRouteSelect.innerHTML = "";
     refs.adjustRouteSelect.innerHTML = "";
+    if (refs.mobileRouteSelect) refs.mobileRouteSelect.innerHTML = "";
 
     refs.graphRouteSelect.add(new Option("Selecciona ruta", ""));
     refs.adjustRouteSelect.add(new Option("Selecciona ruta", ""));
     refs.adjustRouteSelect.add(new Option("Todas las rutas", ALL_ROUTES_VALUE));
+    if (refs.mobileRouteSelect) refs.mobileRouteSelect.add(new Option("Selecciona ruta", ""));
 
     state.routes.forEach((item) => {
         const label = getRouteOptionLabel(item);
         refs.graphRouteSelect.add(new Option(label, item.route));
         refs.adjustRouteSelect.add(new Option(label, item.route));
+        if (refs.mobileRouteSelect) refs.mobileRouteSelect.add(new Option(label, item.route));
     });
 
     if (state.routes.some((item) => item.route === prevGraphValue)) {
@@ -474,6 +572,12 @@ function refreshRouteSelects() {
     if (state.routes.some((item) => item.route === prevAdjustValue)) {
         refs.adjustRouteSelect.value = prevAdjustValue;
     }
+    if (refs.mobileRouteSelect && state.routes.some((item) => item.route === prevMobileValue)) {
+        refs.mobileRouteSelect.value = prevMobileValue;
+    } else if (refs.mobileRouteSelect) {
+        refs.mobileRouteSelect.value = refs.graphRouteSelect.value;
+    }
+    syncMobileRouteHeader();
 }
 
 async function loadInitialData() {
@@ -493,7 +597,7 @@ async function loadInitialData() {
         state.nodes = [];
         state.edges = [];
         state.optimizedRoute = null;
-        if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+        setExportButtonsDisabled(true);
         state.sourceMode = "backend";
         setStatus("Datos iniciales cargados. Selecciona una ruta y presiona Actualizar ruta.");
     } catch (error) {
@@ -537,9 +641,12 @@ function applyOptimizedResult(result) {
 
     state.nodes = nodes;
     state.edges = edges;
-    if (refs.exportGoogleMapsBtn) {
-        refs.exportGoogleMapsBtn.disabled = !result.googleMapsUrl;
-    }
+    const orderedClients = result.sequence || [];
+    const optimizedKeys = new Set(orderedClients.map((client) => client.key));
+    const unsequenced = state.mobile.clients.filter((client) => !optimizedKeys.has(client.key));
+    if (orderedClients.length) state.mobile.clients = [...orderedClients, ...unsequenced];
+    setExportButtonsDisabled(!result.googleMapsUrl);
+    renderMobileSheet();
     renderAll();
 }
 
@@ -578,7 +685,7 @@ function applyGraphClients(route, clients) {
     state.nodes = nodes;
     state.edges = edges;
     state.optimizedRoute = null;
-    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    setExportButtonsDisabled(true);
     renderAll();
 }
 
@@ -590,7 +697,7 @@ function markGraphCalculationError(message) {
         distanceText: "Error",
         durationText: "Ver detalle"
     }));
-    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    setExportButtonsDisabled(true);
     renderAll();
 }
 
@@ -600,8 +707,12 @@ async function loadGraphClientsForRoute() {
     state.graphCalculationError = "";
     state.nodes = [];
     state.edges = [];
-    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    state.mobile.clients = [];
+    state.mobile.selectedClientKey = "";
+    setExportButtonsDisabled(true);
+    syncMobileRouteHeader();
     if (!route) {
+        renderMobileSheet();
         renderAll();
         setStatus("Selecciona una ruta para cargar sus direcciones.");
         return;
@@ -609,7 +720,10 @@ async function loadGraphClientsForRoute() {
 
     try {
         const payload = await apiGet(`/clients?route=${encodeURIComponent(route)}`);
-        const clients = extractClients(payload).filter((client) => String(client.address || "").trim());
+        const allClients = extractClients(payload);
+        state.mobile.clients = allClients;
+        renderMobileSheet();
+        const clients = allClients.filter((client) => String(client.address || "").trim());
         applyGraphClients(route, clients);
         setStatus(`${getRouteDisplay(route)}: ${clients.length} direcciones cargadas. Calculando distancias con Google Maps...`);
         await optimizeCurrentRoute({ auto: true });
@@ -653,6 +767,123 @@ function exportOptimizedRouteToGoogleMaps() {
         return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
+    if (state.mobile.active) {
+        openMobileSheet();
+    }
+}
+
+function showMobileView(viewName) {
+    state.mobile.view = viewName;
+    const views = {
+        route: refs.mobileRouteView,
+        sheet: refs.mobileSheetView,
+        detail: refs.mobileDetailView
+    };
+    Object.entries(views).forEach(([name, element]) => {
+        if (element) element.classList.toggle("is-active", name === viewName);
+    });
+}
+
+function renderMobileSheet() {
+    if (!refs.mobileClientList) return;
+    syncMobileRouteHeader();
+    if (!state.mobile.clients.length) {
+        refs.mobileClientList.innerHTML = `<div class="mobile-empty-state">No hay entregas cargadas.</div>`;
+        return;
+    }
+    refs.mobileClientList.innerHTML = state.mobile.clients.map((client) => {
+        const delivered = Boolean(client.delivered);
+        return `
+            <button class="mobile-client-row" type="button" data-mobile-client="${encodeURIComponent(client.key)}">
+                <span>${escapeHtml(client.nombre_o_razon_social || client.name || client.clientId || "Cliente")}</span>
+                <strong class="mobile-delivery-badge ${delivered ? "is-delivered" : "is-pending"}">
+                    ${delivered ? "Entregado" : "Por entregar"}
+                </strong>
+            </button>
+        `;
+    }).join("");
+}
+
+function renderMobileDetail(client) {
+    if (!client || !refs.mobileProductsList) return;
+    const detail = Array.isArray(client.detail) ? client.detail : [];
+    if (refs.mobileDetailClient) {
+        refs.mobileDetailClient.textContent = client.nombre_o_razon_social || client.name || client.clientId || "Cliente";
+    }
+    const productRows = detail.length
+        ? detail.map((item) => `
+            <div class="mobile-product-row">
+                <span>${escapeHtml(getProductName(item))}</span>
+                <strong>${escapeHtml(getProductQuantity(item))}</strong>
+            </div>
+        `).join("")
+        : `<div class="mobile-empty-state">Sin productos registrados.</div>`;
+    refs.mobileProductsList.innerHTML = `
+        ${productRows}
+        <div class="mobile-product-row mobile-product-row--baskets">
+            <span>Cestas</span>
+            <strong>${escapeHtml(getClientBaskets(client))}</strong>
+        </div>
+    `;
+    if (refs.mobileDeliveredBtn) {
+        refs.mobileDeliveredBtn.disabled = Boolean(client.delivered);
+        refs.mobileDeliveredBtn.textContent = "Entregado";
+    }
+}
+
+function openMobileSheet() {
+    if (!state.mobile.clients.length) {
+        setStatus("Selecciona una ruta con clientes antes de cargar la hoja.");
+        return;
+    }
+    state.mobile.sheetUnlocked = true;
+    if (refs.mobileOpenSheetBtn) refs.mobileOpenSheetBtn.hidden = false;
+    renderMobileSheet();
+    showMobileView("sheet");
+}
+
+function openMobileClientDetail(key) {
+    const client = state.mobile.clients.find((item) => item.key === key);
+    if (!client) return;
+    state.mobile.selectedClientKey = client.key;
+    renderMobileDetail(client);
+    showMobileView("detail");
+}
+
+async function markMobileDeliveryCompleted() {
+    const key = state.mobile.selectedClientKey;
+    const client = state.mobile.clients.find((item) => item.key === key);
+    if (!client || client.delivered) return;
+    try {
+        await apiSend(`/deliveries/${encodeURIComponent(key)}`, {
+            method: "PUT",
+            body: JSON.stringify({ delivered: true })
+        });
+        const applyDelivery = (item) => item.key === key ? { ...item, delivered: true } : item;
+        state.mobile.clients = state.mobile.clients.map(applyDelivery);
+        state.nodes = state.nodes.map(applyDelivery);
+        if (state.optimizedRoute?.sequence) {
+            state.optimizedRoute.sequence = state.optimizedRoute.sequence.map(applyDelivery);
+        }
+        renderMobileSheet();
+        renderGraph();
+        showMobileView("sheet");
+    } catch (error) {
+        setStatus(`No se pudo guardar la entrega: ${error.message}`);
+    }
+}
+
+function applyMobileDriverMode() {
+    const active = isMobileDriverDevice();
+    state.mobile.active = active;
+    document.body.classList.toggle("mobile-driver-mode", active);
+    if (active && refs.mobileGraphSlot && refs.graphStage.parentElement !== refs.mobileGraphSlot) {
+        refs.mobileGraphSlot.appendChild(refs.graphStage);
+        showMobileView(state.mobile.view);
+    }
+    if (!active && refs.desktopGraphSlot && refs.graphStage.parentElement !== refs.desktopGraphSlot) {
+        refs.desktopGraphSlot.appendChild(refs.graphStage);
+    }
 }
 
 function getNodeById(nodeId) {
@@ -1094,7 +1325,7 @@ function renderMaintenanceGraph() {
             </div>
         </div>
     `;
-    if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = true;
+    setExportButtonsDisabled(true);
 }
 
 function clearGoogleMapLayers() {
@@ -1241,7 +1472,7 @@ function bindGraphNodeHover() {
     if (!svg) return;
 
     svg.querySelectorAll(".graph-node").forEach((el) => {
-        el.addEventListener("mouseenter", (event) => {
+        const showPopup = (event) => {
             const nodeId = el.getAttribute("data-node-id");
             const node = state.nodes.find((item) => item.id === nodeId);
             if (!node) return;
@@ -1254,11 +1485,19 @@ function bindGraphNodeHover() {
                 <span><b>Transporte:</b> ${escapeHtml(node.transport || node.tipo_transporte || "-")}</span>
             </div>`;
             popup.style.display = "block";
-            popup.style.left = `${event.clientX + 18}px`;
-            popup.style.top = `${event.clientY - 18}px`;
+            const left = Math.max(12, Math.min(event.clientX + 18, window.innerWidth - 342));
+            const top = Math.max(12, Math.min(event.clientY - 18, window.innerHeight - 210));
+            popup.style.left = `${left}px`;
+            popup.style.top = `${top}px`;
+        };
+        el.addEventListener("mouseenter", showPopup);
+        el.addEventListener("click", (event) => {
+            event.stopPropagation();
+            showPopup(event);
         });
 
         el.addEventListener("mouseleave", () => {
+            if (state.mobile.active) return;
             const popup = document.getElementById("graph-node-popup");
             popup.style.display = "none";
         });
@@ -1546,6 +1785,26 @@ function bindEvents() {
     bindIfExists(refs.optimizeRouteBtn, "click", optimizeCurrentRoute);
     bindIfExists(refs.exportGoogleMapsBtn, "click", exportOptimizedRouteToGoogleMaps);
     bindIfExists(refs.graphRouteSelect, "change", () => loadGraphClientsForRoute());
+    bindIfExists(refs.mobileOptimizeRouteBtn, "click", optimizeCurrentRoute);
+    bindIfExists(refs.mobileExportGoogleMapsBtn, "click", exportOptimizedRouteToGoogleMaps);
+    bindIfExists(refs.mobileOpenSheetBtn, "click", openMobileSheet);
+    bindIfExists(refs.mobileSheetBackBtn, "click", () => showMobileView("route"));
+    bindIfExists(refs.mobileDetailBackBtn, "click", () => showMobileView("sheet"));
+    bindIfExists(refs.mobileDeliveredBtn, "click", markMobileDeliveryCompleted);
+    bindIfExists(refs.mobileGraphZoomIn, "click", () => setGraphScale(state.graphView.scale * 1.18));
+    bindIfExists(refs.mobileGraphZoomOut, "click", () => setGraphScale(state.graphView.scale * 0.85));
+    bindIfExists(refs.mobileRouteSelect, "change", () => {
+        refs.graphRouteSelect.value = refs.mobileRouteSelect.value;
+        state.mobile.sheetUnlocked = false;
+        if (refs.mobileOpenSheetBtn) refs.mobileOpenSheetBtn.hidden = true;
+        syncMobileRouteHeader();
+        loadGraphClientsForRoute();
+    });
+    bindIfExists(refs.mobileClientList, "click", (event) => {
+        const row = event.target.closest("[data-mobile-client]");
+        if (!row) return;
+        openMobileClientDetail(decodeURIComponent(row.dataset.mobileClient));
+    });
     bindIfExists(refs.nodeForm, "submit", handleNodeSubmit);
     bindIfExists(refs.edgeForm, "submit", handleEdgeSubmit);
     bindIfExists(refs.modeErrorsBtn, "click", () => setAdjustMode("errors").catch((e) => setStatus(e.message)));
@@ -1620,11 +1879,13 @@ function bindEvents() {
 }
 
 function init() {
+    applyMobileDriverMode();
     bindEvents();
     bindGraphInteractions();
     updateAdjustModeButtons();
     loadMapsConfig();
     loadInitialData();
+    window.addEventListener("resize", applyMobileDriverMode);
 }
 
 if (document.readyState === "loading") {

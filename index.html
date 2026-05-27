@@ -99,7 +99,9 @@
                             <button id="optimize-route-btn" type="button">Actualizar ruta</button>
                         </div>
                     </div>
-                    <div id="graph-stage" class="graph-stage" aria-live="polite"></div>
+                    <div id="desktop-graph-slot">
+                        <div id="graph-stage" class="graph-stage" aria-live="polite"></div>
+                    </div>
                 </article>
 
                 <aside class="graph-card graph-card--summary">
@@ -220,6 +222,69 @@
                         </div>
                     </form>
                 </div>
+            </div>
+        </section>
+    </main>
+
+    <main id="mobile-driver-app" class="mobile-driver-app" aria-label="Hoja de ruta del conductor">
+        <section id="mobile-route-view" class="mobile-driver-view is-active">
+            <header class="mobile-driver-header">
+                <div class="mobile-header-fact">
+                    <span>Placa</span>
+                    <strong id="mobile-route-plate">-</strong>
+                </div>
+                <img class="mobile-brand-logo" src="assets/logopandetata.png" alt="Pan de Tata" />
+                <div class="mobile-header-fact mobile-header-fact--right">
+                    <span>Ruta</span>
+                    <strong id="mobile-route-name">-</strong>
+                </div>
+            </header>
+            <div class="mobile-route-selector field">
+                <label for="mobile-route-select">Ruta</label>
+                <select id="mobile-route-select">
+                    <option value="">Selecciona ruta</option>
+                </select>
+            </div>
+            <h1 id="mobile-selected-title" class="mobile-selected-title">Selecciona una ruta</h1>
+            <div class="mobile-graph-panel">
+                <div id="mobile-graph-slot" class="mobile-graph-slot"></div>
+                <div class="mobile-graph-tools" aria-label="Zoom del grafo">
+                    <button id="mobile-graph-zoom-in" type="button" title="Acercar" aria-label="Acercar">+</button>
+                    <button id="mobile-graph-zoom-out" type="button" title="Alejar" aria-label="Alejar">-</button>
+                </div>
+            </div>
+            <div class="mobile-route-actions">
+                <button id="mobile-optimize-route-btn" type="button">Actualizar ruta</button>
+                <button id="mobile-export-google-maps-btn" class="mobile-wide-action" type="button" disabled>Exportar a Google Maps</button>
+                <button id="mobile-open-sheet-btn" class="menu-secondary-btn" type="button" hidden>Cargar hoja</button>
+            </div>
+        </section>
+
+        <section id="mobile-sheet-view" class="mobile-driver-view" aria-label="Listado de entregas">
+            <header class="mobile-driver-header">
+                <div class="mobile-header-fact">
+                    <span>Placa</span>
+                    <strong id="mobile-sheet-plate">-</strong>
+                </div>
+                <img class="mobile-brand-logo" src="assets/logopandetata.png" alt="Pan de Tata" />
+                <div class="mobile-header-fact mobile-header-fact--right">
+                    <span>Ruta</span>
+                    <strong id="mobile-sheet-route">-</strong>
+                </div>
+            </header>
+            <div id="mobile-client-list" class="mobile-client-list"></div>
+            <button id="mobile-sheet-back-btn" class="volver-menu mobile-back-btn" type="button">Volver</button>
+        </section>
+
+        <section id="mobile-detail-view" class="mobile-driver-view" aria-label="Detalle de la entrega">
+            <header class="mobile-detail-header">
+                <img class="mobile-brand-logo" src="assets/logopandetata.png" alt="Pan de Tata" />
+                <h2 id="mobile-detail-client">Cliente</h2>
+            </header>
+            <div id="mobile-products-list" class="mobile-products-list"></div>
+            <div class="mobile-detail-actions">
+                <button id="mobile-delivered-btn" class="mobile-delivered-btn" type="button">Entregado</button>
+                <button id="mobile-detail-back-btn" class="volver-menu" type="button">Volver</button>
             </div>
         </section>
     </main>
