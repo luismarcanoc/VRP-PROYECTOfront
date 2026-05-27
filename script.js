@@ -346,7 +346,7 @@ function getClientDeliveredBaskets(client) {
     if (client?.deliveredBaskets !== null && client?.deliveredBaskets !== undefined) {
         return Math.max(0, Math.trunc(toNumber(client.deliveredBaskets, 0)));
     }
-    return getClientBaskets(client);
+    return "";
 }
 
 function normalizeId(value) {
@@ -781,10 +781,12 @@ function exportOptimizedRouteToGoogleMaps() {
         setStatus("Primero actualiza una ruta para generar el link de Google Maps.");
         return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
     if (state.mobile.active) {
         openMobileSheet();
+        window.location.assign(url);
+        return;
     }
+    window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function showMobileView(viewName) {
@@ -840,7 +842,8 @@ function renderMobileDetail(client) {
             <span>Cestas</span>
             <label class="mobile-baskets-input-wrap">
                 <input id="mobile-delivered-baskets-input" type="text" inputmode="numeric" pattern="[0-9]*"
-                    autocomplete="off" value="${escapeHtml(deliveredBaskets)}" aria-label="Cantidad de cestas entregadas" />
+                    autocomplete="off" required value="${escapeHtml(deliveredBaskets)}"
+                    aria-label="Cantidad de cestas entregadas" placeholder="${escapeHtml(getClientBaskets(client))}" />
             </label>
         </div>
     `;
@@ -874,7 +877,13 @@ async function markMobileDeliveryCompleted() {
     const client = state.mobile.clients.find((item) => item.key === key);
     if (!client || client.delivered) return;
     const basketsInput = document.getElementById("mobile-delivered-baskets-input");
-    const deliveredBaskets = Math.max(0, Math.trunc(toNumber(sanitizeNumericValue(basketsInput?.value), 0)));
+    const basketsText = sanitizeNumericValue(basketsInput?.value);
+    if (!basketsText) {
+        basketsInput?.focus();
+        setStatus("Indica la cantidad de cestas entregadas.");
+        return;
+    }
+    const deliveredBaskets = Math.max(0, Math.trunc(toNumber(basketsText, 0)));
     try {
         await apiSend(`/deliveries/${encodeURIComponent(key)}`, {
             method: "PUT",
