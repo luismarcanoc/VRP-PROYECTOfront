@@ -123,7 +123,13 @@ const state = {
         dragStartX: 0,
         dragStartY: 0,
         startTranslateX: 0,
-        startTranslateY: 0
+        startTranslateY: 0,
+        activePointers: new Map(),
+        isPinching: false,
+        pinchStartDistance: 0,
+        pinchStartScale: 1,
+        pinchAnchorX: 0,
+        pinchAnchorY: 0
     }
 };
 
@@ -161,8 +167,6 @@ const refs = {
     mobileClientList: document.getElementById("mobile-client-list"),
     mobileDetailClient: document.getElementById("mobile-detail-client"),
     mobileProductsList: document.getElementById("mobile-products-list"),
-    mobileGraphZoomIn: document.getElementById("mobile-graph-zoom-in"),
-    mobileGraphZoomOut: document.getElementById("mobile-graph-zoom-out"),
     nodeForm: document.getElementById("node-form"),
     edgeForm: document.getElementById("edge-form"),
     nodeId: document.getElementById("node-id"),
@@ -332,6 +336,17 @@ function getProductQuantity(item) {
 
 function getClientBaskets(client) {
     return Math.max(0, toNumber(client?.baskets ?? client?.cantidad_cestas ?? client?.cestas, 0));
+}
+
+function sanitizeNumericValue(value) {
+    return String(value || "").replace(/\D/g, "");
+}
+
+function getClientDeliveredBaskets(client) {
+    if (client?.deliveredBaskets !== null && client?.deliveredBaskets !== undefined) {
+        return Math.max(0, Math.trunc(toNumber(client.deliveredBaskets, 0)));
+    }
+    return getClientBaskets(client);
 }
 
 function normalizeId(value) {
@@ -818,11 +833,15 @@ function renderMobileDetail(client) {
             </div>
         `).join("")
         : `<div class="mobile-empty-state">Sin productos registrados.</div>`;
+    const deliveredBaskets = getClientDeliveredBaskets(client);
     refs.mobileProductsList.innerHTML = `
         ${productRows}
         <div class="mobile-product-row mobile-product-row--baskets">
             <span>Cestas</span>
-            <strong>${escapeHtml(getClientBaskets(client))}</strong>
+            <label class="mobile-baskets-input-wrap">
+                <input id="mobile-delivered-baskets-input" type="text" inputmode="numeric" pattern="[0-9]*"
+                    autocomplete="off" value="${escapeHtml(deliveredBaskets)}" aria-label="Cantidad de cestas entregadas" />
+            </label>
         </div>
     `;
     if (refs.mobileDeliveredBtn) {
@@ -854,12 +873,14 @@ async function markMobileDeliveryCompleted() {
     const key = state.mobile.selectedClientKey;
     const client = state.mobile.clients.find((item) => item.key === key);
     if (!client || client.delivered) return;
+    const basketsInput = document.getElementById("mobile-delivered-baskets-input");
+    const deliveredBaskets = Math.max(0, Math.trunc(toNumber(sanitizeNumericValue(basketsInput?.value), 0)));
     try {
         await apiSend(`/deliveries/${encodeURIComponent(key)}`, {
             method: "PUT",
-            body: JSON.stringify({ delivered: true })
+            body: JSON.stringify({ delivered: true, deliveredBaskets })
         });
-        const applyDelivery = (item) => item.key === key ? { ...item, delivered: true } : item;
+        const applyDelivery = (item) => item.key === key ? { ...item, delivered: true, deliveredBaskets } : item;
         state.mobile.clients = state.mobile.clients.map(applyDelivery);
         state.nodes = state.nodes.map(applyDelivery);
         if (state.optimizedRoute?.sequence) {
@@ -1461,6 +1482,7 @@ function renderGraph() {
             </g>
         </svg>
         ${errorHtml}
+        <div id="graph-popup-dismiss-layer" class="graph-popup-dismiss-layer" style="display:none;position:fixed;"></div>
         <div id="graph-node-popup" class="graph-node-popup" style="display:none;position:fixed;"></div>
     `;
     syncGraphViewportTransform();
@@ -1484,24 +1506,42 @@ function bindGraphNodeHover() {
                 <span><b>Productos:</b> ${escapeHtml(getClientProductSummary(node))}</span>
                 <span><b>Transporte:</b> ${escapeHtml(node.transport || node.tipo_transporte || "-")}</span>
             </div>`;
+            const dismissLayer = document.getElementById("graph-popup-dismiss-layer");
+            if (dismissLayer && state.mobile.active && event.type !== "mouseenter") {
+                dismissLayer.style.display = "block";
+            }
             popup.style.display = "block";
             const left = Math.max(12, Math.min(event.clientX + 18, window.innerWidth - 342));
             const top = Math.max(12, Math.min(event.clientY - 18, window.innerHeight - 210));
             popup.style.left = `${left}px`;
             popup.style.top = `${top}px`;
         };
-        el.addEventListener("mouseenter", showPopup);
+        el.addEventListener("mouseenter", (event) => {
+            if (state.mobile.active) return;
+            showPopup(event);
+        });
         el.addEventListener("click", (event) => {
+            event.stopPropagation();
+            showPopup(event);
+        });
+        el.addEventListener("pointerup", (event) => {
+            if (!state.mobile.active || state.graphView.isPinching) return;
             event.stopPropagation();
             showPopup(event);
         });
 
         el.addEventListener("mouseleave", () => {
             if (state.mobile.active) return;
-            const popup = document.getElementById("graph-node-popup");
-            popup.style.display = "none";
+            hideGraphNodePopup();
         });
     });
+}
+
+function hideGraphNodePopup() {
+    const popup = document.getElementById("graph-node-popup");
+    if (popup) popup.style.display = "none";
+    const dismissLayer = document.getElementById("graph-popup-dismiss-layer");
+    if (dismissLayer) dismissLayer.style.display = "none";
 }
 
 function getEdgeColor(weight, minWeight, maxWeight) {
@@ -1569,6 +1609,44 @@ function setGraphScale(nextScale, anchorX = GRAPH_BOUNDS.width / 2, anchorY = GR
     syncGraphViewportTransform();
 }
 
+function getGraphPointFromClient(clientX, clientY) {
+    const svg = refs.graphStage?.querySelector("svg");
+    if (!svg) return { x: GRAPH_BOUNDS.width / 2, y: GRAPH_BOUNDS.height / 2 };
+    const rect = svg.getBoundingClientRect();
+    return {
+        x: ((clientX - rect.left) / rect.width) * GRAPH_BOUNDS.width,
+        y: ((clientY - rect.top) / rect.height) * GRAPH_BOUNDS.height
+    };
+}
+
+function getPointerPair() {
+    return Array.from(state.graphView.activePointers.values()).slice(0, 2);
+}
+
+function getPointerDistance(first, second) {
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+function getPointerMidpoint(first, second) {
+    return {
+        clientX: (first.clientX + second.clientX) / 2,
+        clientY: (first.clientY + second.clientY) / 2
+    };
+}
+
+function startGraphPinch() {
+    const [first, second] = getPointerPair();
+    if (!first || !second) return;
+    const midpoint = getPointerMidpoint(first, second);
+    const anchor = getGraphPointFromClient(midpoint.clientX, midpoint.clientY);
+    state.graphView.isPinching = true;
+    state.graphView.isDragging = false;
+    state.graphView.pinchStartDistance = Math.max(1, getPointerDistance(first, second));
+    state.graphView.pinchStartScale = state.graphView.scale;
+    state.graphView.pinchAnchorX = anchor.x;
+    state.graphView.pinchAnchorY = anchor.y;
+}
+
 function bindGraphInteractions() {
     if (!refs.graphStage) return;
     refs.graphStage.addEventListener("wheel", (event) => {
@@ -1584,18 +1662,55 @@ function bindGraphInteractions() {
     }, { passive: false });
 
     refs.graphStage.addEventListener("pointerdown", (event) => {
-        if (!refs.graphStage.querySelector("svg")) return;
+        const svg = refs.graphStage.querySelector("svg");
+        if (!svg) return;
         event.preventDefault();
+        if (state.mobile.active && !event.target.closest(".graph-node")) {
+            hideGraphNodePopup();
+        }
+        state.graphView.activePointers.set(event.pointerId, {
+            pointerId: event.pointerId,
+            clientX: event.clientX,
+            clientY: event.clientY
+        });
+        try {
+            refs.graphStage.setPointerCapture(event.pointerId);
+        } catch (_) {}
+
+        if (state.mobile.active && state.graphView.activePointers.size >= 2) {
+            startGraphPinch();
+            refs.graphStage.classList.add("is-dragging");
+            return;
+        }
+
         state.graphView.isDragging = true;
         state.graphView.dragStartX = event.clientX;
         state.graphView.dragStartY = event.clientY;
         state.graphView.startTranslateX = state.graphView.translateX;
         state.graphView.startTranslateY = state.graphView.translateY;
         refs.graphStage.classList.add("is-dragging");
-        refs.graphStage.setPointerCapture(event.pointerId);
     });
 
     refs.graphStage.addEventListener("pointermove", (event) => {
+        if (state.graphView.activePointers.has(event.pointerId)) {
+            state.graphView.activePointers.set(event.pointerId, {
+                pointerId: event.pointerId,
+                clientX: event.clientX,
+                clientY: event.clientY
+            });
+        }
+        if (state.graphView.isPinching && state.graphView.activePointers.size >= 2) {
+            event.preventDefault();
+            const [first, second] = getPointerPair();
+            const distance = Math.max(1, getPointerDistance(first, second));
+            const ratio = distance / Math.max(1, state.graphView.pinchStartDistance);
+            setGraphScale(
+                state.graphView.pinchStartScale * ratio,
+                state.graphView.pinchAnchorX,
+                state.graphView.pinchAnchorY
+            );
+            return;
+        }
         if (!state.graphView.isDragging) return;
         event.preventDefault();
         const svg = refs.graphStage.querySelector("svg");
@@ -1611,16 +1726,40 @@ function bindGraphInteractions() {
     });
 
     const stopDragging = (event) => {
-        if (event && refs.graphStage.hasPointerCapture(event.pointerId)) {
-            refs.graphStage.releasePointerCapture(event.pointerId);
+        try {
+            if (event && refs.graphStage.hasPointerCapture(event.pointerId)) {
+                refs.graphStage.releasePointerCapture(event.pointerId);
+            }
+        } catch (_) {}
+        if (event) state.graphView.activePointers.delete(event.pointerId);
+        if (state.graphView.activePointers.size < 2) {
+            state.graphView.isPinching = false;
         }
-        state.graphView.isDragging = false;
-        refs.graphStage.classList.remove("is-dragging");
+        if (state.graphView.activePointers.size === 0) {
+            state.graphView.isDragging = false;
+            refs.graphStage.classList.remove("is-dragging");
+        }
     };
 
     refs.graphStage.addEventListener("pointerup", stopDragging);
     refs.graphStage.addEventListener("pointercancel", stopDragging);
     refs.graphStage.addEventListener("pointerleave", stopDragging);
+
+    const closePopupFromOutsideTap = (event) => {
+        if (!state.mobile.active) return;
+        const target = event.target;
+        if (target?.closest?.(".graph-node") || target?.closest?.(".graph-node-popup")) return;
+        hideGraphNodePopup();
+    };
+    refs.graphStage.addEventListener("pointerdown", (event) => {
+        if (event.target?.id === "graph-popup-dismiss-layer") {
+            event.preventDefault();
+            hideGraphNodePopup();
+        }
+    });
+    document.addEventListener("pointerdown", closePopupFromOutsideTap, true);
+    document.addEventListener("touchstart", closePopupFromOutsideTap, { passive: true, capture: true });
+    document.addEventListener("click", closePopupFromOutsideTap, true);
 }
 
 function renderSummary() {
@@ -1791,8 +1930,11 @@ function bindEvents() {
     bindIfExists(refs.mobileSheetBackBtn, "click", () => showMobileView("route"));
     bindIfExists(refs.mobileDetailBackBtn, "click", () => showMobileView("sheet"));
     bindIfExists(refs.mobileDeliveredBtn, "click", markMobileDeliveryCompleted);
-    bindIfExists(refs.mobileGraphZoomIn, "click", () => setGraphScale(state.graphView.scale * 1.18));
-    bindIfExists(refs.mobileGraphZoomOut, "click", () => setGraphScale(state.graphView.scale * 0.85));
+    bindIfExists(refs.mobileProductsList, "input", (event) => {
+        if (event.target?.id === "mobile-delivered-baskets-input") {
+            event.target.value = sanitizeNumericValue(event.target.value);
+        }
+    });
     bindIfExists(refs.mobileRouteSelect, "change", () => {
         refs.graphRouteSelect.value = refs.mobileRouteSelect.value;
         state.mobile.sheetUnlocked = false;

@@ -607,6 +607,12 @@ button:focus-visible,
     pointer-events: none;
 }
 
+.graph-popup-dismiss-layer {
+    inset: 0;
+    z-index: 1290;
+    background: transparent;
+}
+
 .graph-error-banner {
     position: absolute;
     left: 18px;
@@ -1064,28 +1070,6 @@ body.mobile-driver-mode .mobile-driver-app {
     position: relative;
 }
 
-.mobile-graph-tools {
-    position: absolute;
-    right: 10px;
-    top: 10px;
-    z-index: 2;
-    display: grid;
-    gap: 6px;
-}
-
-.mobile-graph-tools button {
-    min-width: 38px;
-    width: 38px;
-    min-height: 38px;
-    height: 38px;
-    padding: 0;
-    border-radius: 50%;
-    background: rgba(255, 253, 248, 0.96);
-    color: var(--pdt-brown-dark);
-    font-size: 1.35rem;
-    line-height: 1;
-}
-
 body.mobile-driver-mode .graph-stage {
     width: 100%;
     height: min(43dvh, 370px);
@@ -1243,6 +1227,32 @@ body.mobile-driver-mode .graph-error-banner {
 .mobile-product-row strong {
     justify-content: center;
     border-left: 1px solid rgba(192, 110, 50, 0.22);
+}
+
+.mobile-baskets-input-wrap {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-left: 1px solid rgba(192, 110, 50, 0.22);
+}
+
+.mobile-baskets-input-wrap input {
+    width: 100%;
+    min-height: 46px;
+    border-radius: 10px;
+    border: 1px solid var(--pdt-border);
+    background: #fff;
+    color: var(--pdt-black);
+    text-align: center;
+    font: inherit;
+    font-weight: 900;
+}
+
+.mobile-baskets-input-wrap input:focus {
+    outline: 3px solid rgba(192, 110, 50, 0.22);
+    border-color: var(--pdt-brown);
 }
 
 .mobile-product-row--baskets {
