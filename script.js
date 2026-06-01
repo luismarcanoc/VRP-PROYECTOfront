@@ -539,7 +539,7 @@ function getLoadingCopy(pathname, method) {
     if (pathname.includes("/errors")) {
         return {
             title: "Buscando errores...",
-            subtitle: "Validando clientes con datos incompletos en backend."
+            subtitle: "Validando datos y ubicaciones con Google Maps."
         };
     }
     if (pathname.includes("/optimize-route")) {
@@ -899,7 +899,13 @@ async function optimizeCurrentRoute(options = {}) {
             body: JSON.stringify({ route, origin })
         });
         applyOptimizedResult(payload.optimized);
-        setStatus(`Ruta ${getRouteDisplay(route)} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.`);
+        const addressWarnings = (payload.optimized.sequence || []).filter((client) => client.googleAddressIssue).length;
+        setStatus(
+            `Ruta ${getRouteDisplay(route)} actualizada: ${payload.optimized.totalDistanceKm} km, ${payload.optimized.totalDurationText || "tiempo no disponible"}.` +
+            (addressWarnings
+                ? ` ${addressWarnings} direccion(es) requieren revision en Ajustar datos > Arreglo de errores.`
+                : "")
+        );
     } catch (error) {
         markGraphCalculationError(error.message);
         const prefix = options.auto ? "No se pudo calcular automaticamente" : "Error al actualizar la ruta";
@@ -1187,6 +1193,9 @@ function getClientErrorLabel(client) {
     const route = String(client.route || "").trim();
     if (!route) issues.push("Ruta vacia");
     else if (normalizeTextForMatch(route).includes("revisar manualmente")) issues.push("Ruta: revisar manualmente");
+    if (client.googleAddressIssue) {
+        issues.push(client.googleAddressReason || "Google Maps no pudo confirmar esta ubicacion");
+    }
     return issues.length ? issues.join(" | ") : "Sin error";
 }
 
@@ -1254,7 +1263,11 @@ async function setAdjustMode(mode) {
         syncTransportFilterOptions();
         renderAdjustTable();
         if (refs.adjustTableShell) refs.adjustTableShell.scrollTop = 0;
-        setStatus(`Mostrando ${state.adjustClientsRaw.length} clientes con errores.`);
+        const warning = String(payload.validationWarning || "").trim();
+        setStatus(warning
+            ? `Mostrando ${state.adjustClientsRaw.length} clientes con errores. Validacion de Google incompleta: ${warning}`
+            : `Mostrando ${state.adjustClientsRaw.length} clientes con errores.`
+        );
         return;
     }
     await loadClientsByAdjustRoute();
