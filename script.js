@@ -134,10 +134,18 @@ const state = {
 };
 
 const GRAPH_BOUNDS = {
-    width: 840,
-    height: 520,
-    paddingX: 180,
-    paddingY: 180
+    width: 900,
+    height: 680,
+    paddingX: 120,
+    paddingY: 120
+};
+
+const GRAPH_LONG_ROUTE_LAYOUT = {
+    columns: 4,
+    left: 110,
+    right: GRAPH_BOUNDS.width - 110,
+    top: 110,
+    rowGap: 190
 };
 
 const refs = {
@@ -1332,17 +1340,78 @@ function getNodePositions() {
         return positions;
     }
 
+    if (total <= 7) {
+        state.nodes.forEach((node, index) => {
+            const left = 86;
+            const right = GRAPH_BOUNDS.width - 86;
+            const x = left + ((right - left) * index) / Math.max(total - 1, 1);
+            const y = index === 0
+                ? GRAPH_BOUNDS.height / 2
+                : (index % 2 === 1 ? 174 : GRAPH_BOUNDS.height - 174);
+            positions.set(node.id, { x, y, row: index === 0 ? 1 : (index % 2 === 1 ? 0 : 2) });
+        });
+        return positions;
+    }
+
+    const { columns, left, right, top, rowGap } = GRAPH_LONG_ROUTE_LAYOUT;
+    const columnGap = (right - left) / Math.max(columns - 1, 1);
     state.nodes.forEach((node, index) => {
-        const left = 76;
-        const right = GRAPH_BOUNDS.width - 76;
-        const x = left + ((right - left) * index) / Math.max(total - 1, 1);
-        const y = index === 0
-            ? GRAPH_BOUNDS.height / 2
-            : (index % 2 === 1 ? 132 : GRAPH_BOUNDS.height - 132);
-        positions.set(node.id, { x, y });
+        const row = Math.floor(index / columns);
+        const columnInRow = index % columns;
+        const column = row % 2 === 0 ? columnInRow : columns - 1 - columnInRow;
+        positions.set(node.id, {
+            x: left + (column * columnGap),
+            y: top + (row * rowGap),
+            row
+        });
     });
 
     return positions;
+}
+
+function splitGraphNodeLabel(value, maxChars = 20, maxLines = 2) {
+    const text = String(value || "").trim();
+    if (!text) return [""];
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = "";
+
+    words.forEach((word) => {
+        const candidate = current ? `${current} ${word}` : word;
+        if (candidate.length <= maxChars || !current) {
+            current = candidate;
+            return;
+        }
+        lines.push(current);
+        current = word;
+    });
+    if (current) lines.push(current);
+
+    if (lines.length <= maxLines) return lines;
+    const visible = lines.slice(0, maxLines);
+    visible[maxLines - 1] = truncateText(lines.slice(maxLines - 1).join(" "), maxChars);
+    return visible;
+}
+
+function getGraphContentBounds() {
+    if (state.nodes.length <= 7) return { width: GRAPH_BOUNDS.width, height: GRAPH_BOUNDS.height };
+    const rowCount = Math.ceil(state.nodes.length / GRAPH_LONG_ROUTE_LAYOUT.columns);
+    return {
+        width: GRAPH_BOUNDS.width,
+        height: Math.max(
+            GRAPH_BOUNDS.height,
+            GRAPH_LONG_ROUTE_LAYOUT.top + ((rowCount - 1) * GRAPH_LONG_ROUTE_LAYOUT.rowGap) + 90
+        )
+    };
+}
+
+function getGraphSvgViewportBounds() {
+    return {
+        x: -GRAPH_BOUNDS.paddingX,
+        y: -GRAPH_BOUNDS.paddingY,
+        width: GRAPH_BOUNDS.width + (GRAPH_BOUNDS.paddingX * 2),
+        height: GRAPH_BOUNDS.height + (GRAPH_BOUNDS.paddingY * 2)
+    };
 }
 
 function renderMaintenanceGraph() {
@@ -1446,7 +1515,13 @@ function renderGraph() {
             const origin = positions.get(edge.origin);
             const destination = positions.get(edge.destination);
             if (!origin || !destination) return "";
-            const midX = (origin.x + destination.x) / 2;
+            const deltaX = destination.x - origin.x;
+            const deltaY = destination.y - origin.y;
+            const isMostlyVertical = Math.abs(deltaY) > Math.abs(deltaX);
+            const verticalLabelOffset = isMostlyVertical
+                ? (origin.x > GRAPH_BOUNDS.width / 2 ? -72 : 72)
+                : 0;
+            const midX = ((origin.x + destination.x) / 2) + verticalLabelOffset;
             const midY = (origin.y + destination.y) / 2;
             const edgeColor = getEdgeColor(getEdgeMetric(edge), minWeight, maxWeight);
             const edgeLabel = getEdgeLabel(edge);
@@ -1468,14 +1543,19 @@ function renderGraph() {
             const position = positions.get(node.id);
             if (!position) return "";
             const radius = node.id === "ORIGEN" ? 30 : 26;
-            const label = truncateText(node.nombre_o_razon_social || node.name || node.id, node.id === "ORIGEN" ? 18 : 24);
-            const labelY = position.y < GRAPH_BOUNDS.height / 2 ? position.y - radius - 12 : position.y + radius + 24;
+            const labelLines = splitGraphNodeLabel(
+                node.nombre_o_razon_social || node.name || node.id,
+                node.id === "ORIGEN" ? 18 : 20
+            );
+            const labelY = position.y - radius - 16 - ((labelLines.length - 1) * 7);
             return `
                 <g class="graph-node" data-node-id="${node.id}">
                     <circle cx="${position.x}" cy="${position.y}" r="${radius}" fill="#fff8ed" stroke="#c06e32" stroke-width="3"></circle>
                     <circle cx="${position.x}" cy="${position.y}" r="${Math.max(8, radius - 12)}" fill="rgba(192,110,50,0.14)"></circle>
                     <text x="${position.x}" y="${position.y + 5}" fill="#000000" font-size="13" font-weight="900" text-anchor="middle">${node.id === "ORIGEN" ? "PDT" : node.stopNumber || node.rowNumber || ""}</text>
-                    <text x="${position.x}" y="${labelY}" fill="#111111" font-size="12" font-weight="900" text-anchor="middle">${escapeHtml(label)}</text>
+                    <text x="${position.x}" y="${labelY}" fill="#111111" font-size="11" font-weight="900" text-anchor="middle">
+                        ${labelLines.map((line, index) => `<tspan x="${position.x}" dy="${index === 0 ? 0 : 13}">${escapeHtml(line)}</tspan>`).join("")}
+                    </text>
                 </g>
             `;
         })
@@ -1598,8 +1678,13 @@ function syncGraphViewportTransform() {
 
 function clampGraphPan() {
     const scale = state.graphView.scale;
-    const maxX = 420 + Math.max(0, (GRAPH_BOUNDS.width * (scale - 1)) / 2);
-    const maxY = 260 + Math.max(0, (GRAPH_BOUNDS.height * (scale - 1)) / 2);
+    const content = getGraphContentBounds();
+    const maxX = (GRAPH_BOUNDS.width / 2)
+        + Math.max(0, content.width - GRAPH_BOUNDS.width)
+        + Math.max(0, (GRAPH_BOUNDS.width * (scale - 1)) / 2);
+    const maxY = (GRAPH_BOUNDS.height / 2)
+        + Math.max(0, content.height - GRAPH_BOUNDS.height)
+        + Math.max(0, (GRAPH_BOUNDS.height * (scale - 1)) / 2);
     state.graphView.translateX = Math.min(maxX, Math.max(-maxX, state.graphView.translateX));
     state.graphView.translateY = Math.min(maxY, Math.max(-maxY, state.graphView.translateY));
 }
@@ -1622,9 +1707,10 @@ function getGraphPointFromClient(clientX, clientY) {
     const svg = refs.graphStage?.querySelector("svg");
     if (!svg) return { x: GRAPH_BOUNDS.width / 2, y: GRAPH_BOUNDS.height / 2 };
     const rect = svg.getBoundingClientRect();
+    const viewport = getGraphSvgViewportBounds();
     return {
-        x: ((clientX - rect.left) / rect.width) * GRAPH_BOUNDS.width,
-        y: ((clientY - rect.top) / rect.height) * GRAPH_BOUNDS.height
+        x: viewport.x + (((clientX - rect.left) / rect.width) * viewport.width),
+        y: viewport.y + (((clientY - rect.top) / rect.height) * viewport.height)
     };
 }
 
@@ -1663,9 +1749,7 @@ function bindGraphInteractions() {
         if (!svg) return;
         event.preventDefault();
 
-        const rect = svg.getBoundingClientRect();
-        const viewX = ((event.clientX - rect.left) / rect.width) * GRAPH_BOUNDS.width;
-        const viewY = ((event.clientY - rect.top) / rect.height) * GRAPH_BOUNDS.height;
+        const { x: viewX, y: viewY } = getGraphPointFromClient(event.clientX, event.clientY);
         const factor = event.deltaY < 0 ? 1.12 : 0.9;
         setGraphScale(state.graphView.scale * factor, viewX, viewY);
     }, { passive: false });
