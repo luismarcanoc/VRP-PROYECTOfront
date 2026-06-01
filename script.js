@@ -111,7 +111,8 @@ const state = {
         view: "route",
         clients: [],
         selectedClientKey: "",
-        sheetUnlocked: false
+        sheetUnlocked: false,
+        segmentsUnlocked: false
     },
     graphView: {
         scale: 1,
@@ -154,6 +155,7 @@ const refs = {
     graphRouteSelect: document.getElementById("graph-route-select"),
     optimizeRouteBtn: document.getElementById("optimize-route-btn"),
     exportGoogleMapsBtn: document.getElementById("export-google-maps-btn"),
+    desktopMapsSegmentActions: document.getElementById("desktop-maps-segment-actions"),
     desktopGraphSlot: document.getElementById("desktop-graph-slot"),
     mobileGraphSlot: document.getElementById("mobile-graph-slot"),
     mobileDriverApp: document.getElementById("mobile-driver-app"),
@@ -163,10 +165,13 @@ const refs = {
     mobileRouteSelect: document.getElementById("mobile-route-select"),
     mobileOptimizeRouteBtn: document.getElementById("mobile-optimize-route-btn"),
     mobileExportGoogleMapsBtn: document.getElementById("mobile-export-google-maps-btn"),
+    mobileMapsSegmentActions: document.getElementById("mobile-maps-segment-actions"),
     mobileOpenSheetBtn: document.getElementById("mobile-open-sheet-btn"),
+    mobileNavigateNextBtn: document.getElementById("mobile-navigate-next-btn"),
     mobileSheetBackBtn: document.getElementById("mobile-sheet-back-btn"),
     mobileDetailBackBtn: document.getElementById("mobile-detail-back-btn"),
     mobileDeliveredBtn: document.getElementById("mobile-delivered-btn"),
+    mobileNavigateClientBtn: document.getElementById("mobile-navigate-client-btn"),
     mobileRoutePlate: document.getElementById("mobile-route-plate"),
     mobileRouteName: document.getElementById("mobile-route-name"),
     mobileSheetPlate: document.getElementById("mobile-sheet-plate"),
@@ -175,6 +180,10 @@ const refs = {
     mobileClientList: document.getElementById("mobile-client-list"),
     mobileDetailClient: document.getElementById("mobile-detail-client"),
     mobileProductsList: document.getElementById("mobile-products-list"),
+    mapsSegmentWarning: document.getElementById("maps-segment-warning"),
+    mapsSegmentWarningText: document.getElementById("maps-segment-warning-text"),
+    mapsSegmentWarningCancel: document.getElementById("maps-segment-warning-cancel"),
+    mapsSegmentWarningConfirm: document.getElementById("maps-segment-warning-confirm"),
     nodeForm: document.getElementById("node-form"),
     edgeForm: document.getElementById("edge-form"),
     nodeId: document.getElementById("node-id"),
@@ -278,6 +287,115 @@ function syncMobileRouteHeader() {
 function setExportButtonsDisabled(disabled) {
     if (refs.exportGoogleMapsBtn) refs.exportGoogleMapsBtn.disabled = disabled;
     if (refs.mobileExportGoogleMapsBtn) refs.mobileExportGoogleMapsBtn.disabled = disabled;
+}
+
+function getGoogleMapsSegments() {
+    const segments = Array.isArray(state.optimizedRoute?.googleMapsSegments)
+        ? state.optimizedRoute.googleMapsSegments.filter((segment) => segment?.googleMapsUrl)
+        : [];
+    if (segments.length) return segments;
+    const fallbackUrl = state.optimizedRoute?.googleMapsUrl;
+    return fallbackUrl ? [{ index: 1, googleMapsUrl: fallbackUrl }] : [];
+}
+
+function getSegmentButtonLabel(index) {
+    const names = ["primer", "segundo", "tercer", "cuarto"];
+    return `Cargar ${names[index] || `tramo ${index + 1}`}${index < names.length ? " tramo" : ""}`;
+}
+
+function renderMapsSegmentActions() {
+    const segments = getGoogleMapsSegments();
+    const visible = state.mobile.segmentsUnlocked && segments.length > 1;
+    const html = visible
+        ? segments.map((segment, index) => `
+            <button type="button" data-google-maps-segment="${index}">
+                ${escapeHtml(getSegmentButtonLabel(index))}
+            </button>
+        `).join("")
+        : "";
+    [refs.desktopMapsSegmentActions, refs.mobileMapsSegmentActions].forEach((container) => {
+        if (!container) return;
+        container.hidden = !visible;
+        container.innerHTML = html;
+    });
+}
+
+function setMapsSegmentsUnlocked(unlocked) {
+    state.mobile.segmentsUnlocked = Boolean(unlocked);
+    renderMapsSegmentActions();
+}
+
+function closeMapsSegmentWarning() {
+    if (refs.mapsSegmentWarning) refs.mapsSegmentWarning.hidden = true;
+}
+
+function openExternalGoogleMapsUrl(url) {
+    if (!url) return;
+    if (state.mobile.active) {
+        window.location.assign(url);
+        return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function openGoogleMapsSegment(index) {
+    const segments = getGoogleMapsSegments();
+    const segment = segments[index];
+    if (!segment?.googleMapsUrl) {
+        setStatus("Ese tramo no esta disponible. Actualiza la ruta nuevamente.");
+        return;
+    }
+    closeMapsSegmentWarning();
+    setMapsSegmentsUnlocked(segments.length > 1);
+    if (state.mobile.active) openMobileSheet();
+    openExternalGoogleMapsUrl(segment.googleMapsUrl);
+}
+
+function openMapsSegmentWarning() {
+    const segments = getGoogleMapsSegments();
+    const totalClients = Number(state.optimizedRoute?.totalClients || state.optimizedRoute?.sequence?.length || 0);
+    if (refs.mapsSegmentWarningText) {
+        refs.mapsSegmentWarningText.textContent =
+            `Esta ruta tiene ${totalClients} clientes. Google Maps permite cargar hasta 10 entregas por viaje, ` +
+            `por lo que se dividira en ${segments.length} tramos. Cuando termines el primer tramo, vuelve a esta pagina ` +
+            `y presiona "${getSegmentButtonLabel(1)}".`;
+    }
+    if (refs.mapsSegmentWarning) refs.mapsSegmentWarning.hidden = false;
+}
+
+function makeClientNavigationUrl(address) {
+    const destination = String(address || "").trim();
+    if (!destination) return "";
+    const params = new URLSearchParams({
+        api: "1",
+        destination,
+        travelmode: "driving",
+        dir_action: "navigate"
+    });
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function navigateToMobileClient(client) {
+    const url = client?.googleMapsNavigationUrl || makeClientNavigationUrl(client?.address);
+    if (!url) {
+        setStatus("Este cliente no tiene una direccion disponible para navegar.");
+        return;
+    }
+    openExternalGoogleMapsUrl(url);
+}
+
+function navigateToSelectedMobileClient() {
+    const client = state.mobile.clients.find((item) => item.key === state.mobile.selectedClientKey);
+    if (client) navigateToMobileClient(client);
+}
+
+function navigateToNextMobileClient() {
+    const client = state.mobile.clients.find((item) => !item.delivered && String(item.address || "").trim());
+    if (!client) {
+        setStatus("No quedan clientes pendientes con direccion disponible.");
+        return;
+    }
+    navigateToMobileClient(client);
 }
 
 function setAdjustTableMessage(message) {
@@ -668,7 +786,8 @@ function applyOptimizedResult(result) {
     const optimizedKeys = new Set(orderedClients.map((client) => client.key));
     const unsequenced = state.mobile.clients.filter((client) => !optimizedKeys.has(client.key));
     if (orderedClients.length) state.mobile.clients = [...orderedClients, ...unsequenced];
-    setExportButtonsDisabled(!result.googleMapsUrl);
+    setMapsSegmentsUnlocked(false);
+    setExportButtonsDisabled(!getGoogleMapsSegments().length);
     renderMobileSheet();
     renderAll();
 }
@@ -708,6 +827,7 @@ function applyGraphClients(route, clients) {
     state.nodes = nodes;
     state.edges = edges;
     state.optimizedRoute = null;
+    setMapsSegmentsUnlocked(false);
     setExportButtonsDisabled(true);
     renderAll();
 }
@@ -715,6 +835,7 @@ function applyGraphClients(route, clients) {
 function markGraphCalculationError(message) {
     state.graphCalculationError = message;
     state.optimizedRoute = null;
+    setMapsSegmentsUnlocked(false);
     state.edges = state.edges.map((edge) => ({
         ...edge,
         distanceText: "Error",
@@ -732,6 +853,9 @@ async function loadGraphClientsForRoute() {
     state.edges = [];
     state.mobile.clients = [];
     state.mobile.selectedClientKey = "";
+    state.mobile.sheetUnlocked = false;
+    closeMapsSegmentWarning();
+    setMapsSegmentsUnlocked(false);
     setExportButtonsDisabled(true);
     syncMobileRouteHeader();
     if (!route) {
@@ -784,17 +908,16 @@ async function optimizeCurrentRoute(options = {}) {
 }
 
 function exportOptimizedRouteToGoogleMaps() {
-    const url = state.optimizedRoute?.googleMapsUrl;
-    if (!url) {
+    const segments = getGoogleMapsSegments();
+    if (!segments.length) {
         setStatus("Primero actualiza una ruta para generar el link de Google Maps.");
         return;
     }
-    if (state.mobile.active) {
-        openMobileSheet();
-        window.location.assign(url);
+    if (segments.length > 1) {
+        openMapsSegmentWarning();
         return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+    openGoogleMapsSegment(0);
 }
 
 function showMobileView(viewName) {
@@ -814,6 +937,7 @@ function renderMobileSheet() {
     syncMobileRouteHeader();
     if (!state.mobile.clients.length) {
         refs.mobileClientList.innerHTML = `<div class="mobile-empty-state">No hay entregas cargadas.</div>`;
+        if (refs.mobileNavigateNextBtn) refs.mobileNavigateNextBtn.disabled = true;
         return;
     }
     refs.mobileClientList.innerHTML = state.mobile.clients.map((client) => {
@@ -827,6 +951,11 @@ function renderMobileSheet() {
             </button>
         `;
     }).join("");
+    if (refs.mobileNavigateNextBtn) {
+        refs.mobileNavigateNextBtn.disabled = !state.mobile.clients.some((client) =>
+            !client.delivered && String(client.address || "").trim()
+        );
+    }
 }
 
 function renderMobileDetail(client) {
@@ -858,6 +987,9 @@ function renderMobileDetail(client) {
     if (refs.mobileDeliveredBtn) {
         refs.mobileDeliveredBtn.disabled = Boolean(client.delivered);
         refs.mobileDeliveredBtn.textContent = "Entregado";
+    }
+    if (refs.mobileNavigateClientBtn) {
+        refs.mobileNavigateClientBtn.disabled = !String(client.address || "").trim();
     }
 }
 
@@ -2023,6 +2155,20 @@ function bindEvents() {
     bindIfExists(refs.mobileSheetBackBtn, "click", () => showMobileView("route"));
     bindIfExists(refs.mobileDetailBackBtn, "click", () => showMobileView("sheet"));
     bindIfExists(refs.mobileDeliveredBtn, "click", markMobileDeliveryCompleted);
+    bindIfExists(refs.mobileNavigateClientBtn, "click", navigateToSelectedMobileClient);
+    bindIfExists(refs.mobileNavigateNextBtn, "click", navigateToNextMobileClient);
+    bindIfExists(refs.mapsSegmentWarningCancel, "click", closeMapsSegmentWarning);
+    bindIfExists(refs.mapsSegmentWarningConfirm, "click", () => openGoogleMapsSegment(0));
+    bindIfExists(refs.mapsSegmentWarning, "click", (event) => {
+        if (event.target === refs.mapsSegmentWarning) closeMapsSegmentWarning();
+    });
+    [refs.desktopMapsSegmentActions, refs.mobileMapsSegmentActions].forEach((container) => {
+        bindIfExists(container, "click", (event) => {
+            const button = event.target.closest("[data-google-maps-segment]");
+            if (!button) return;
+            openGoogleMapsSegment(Number(button.dataset.googleMapsSegment));
+        });
+    });
     bindIfExists(refs.mobileProductsList, "input", (event) => {
         if (event.target?.id === "mobile-delivered-baskets-input") {
             event.target.value = sanitizeNumericValue(event.target.value);
@@ -2031,6 +2177,7 @@ function bindEvents() {
     bindIfExists(refs.mobileRouteSelect, "change", () => {
         refs.graphRouteSelect.value = refs.mobileRouteSelect.value;
         state.mobile.sheetUnlocked = false;
+        setMapsSegmentsUnlocked(false);
         if (refs.mobileOpenSheetBtn) refs.mobileOpenSheetBtn.hidden = true;
         syncMobileRouteHeader();
         loadGraphClientsForRoute();

@@ -99,6 +99,7 @@
                             <button id="optimize-route-btn" type="button">Actualizar ruta</button>
                         </div>
                     </div>
+                    <div id="desktop-maps-segment-actions" class="maps-segment-actions" hidden></div>
                     <div id="desktop-graph-slot">
                         <div id="graph-stage" class="graph-stage" aria-live="polite"></div>
                     </div>
@@ -252,6 +253,7 @@
             <div class="mobile-route-actions">
                 <button id="mobile-optimize-route-btn" type="button">Actualizar ruta</button>
                 <button id="mobile-export-google-maps-btn" class="mobile-wide-action" type="button" disabled>Exportar a Google Maps</button>
+                <div id="mobile-maps-segment-actions" class="maps-segment-actions mobile-wide-action" hidden></div>
                 <button id="mobile-open-sheet-btn" class="menu-secondary-btn" type="button" hidden>Cargar hoja</button>
             </div>
         </section>
@@ -269,7 +271,10 @@
                 </div>
             </header>
             <div id="mobile-client-list" class="mobile-client-list"></div>
-            <button id="mobile-sheet-back-btn" class="volver-menu mobile-back-btn" type="button">Volver</button>
+            <div class="mobile-sheet-actions">
+                <button id="mobile-navigate-next-btn" type="button">Navegar al siguiente</button>
+                <button id="mobile-sheet-back-btn" class="volver-menu mobile-back-btn" type="button">Volver</button>
+            </div>
         </section>
 
         <section id="mobile-detail-view" class="mobile-driver-view" aria-label="Detalle de la entrega">
@@ -279,11 +284,23 @@
             </header>
             <div id="mobile-products-list" class="mobile-products-list"></div>
             <div class="mobile-detail-actions">
+                <button id="mobile-navigate-client-btn" type="button">Navegar a este cliente</button>
                 <button id="mobile-delivered-btn" class="mobile-delivered-btn" type="button">Entregado</button>
                 <button id="mobile-detail-back-btn" class="volver-menu" type="button">Volver</button>
             </div>
         </section>
     </main>
+
+    <div id="maps-segment-warning" class="maps-segment-warning" hidden>
+        <section class="maps-segment-warning-card" role="dialog" aria-modal="true" aria-labelledby="maps-segment-warning-title">
+            <h2 id="maps-segment-warning-title">Ruta dividida en tramos</h2>
+            <p id="maps-segment-warning-text"></p>
+            <div class="maps-segment-warning-actions">
+                <button id="maps-segment-warning-cancel" class="volver-menu" type="button">Cancelar</button>
+                <button id="maps-segment-warning-confirm" type="button">Cargar primer tramo</button>
+            </div>
+        </section>
+    </div>
 
     <div id="loading-overlay" class="loading-overlay" aria-live="polite" aria-busy="false">
         <div class="loading-card" role="status">

@@ -1102,6 +1102,25 @@ body.mobile-driver-mode .graph-error-banner {
     width: 100%;
 }
 
+.maps-segment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 12px 0 2px;
+}
+
+.maps-segment-actions[hidden] {
+    display: none;
+}
+
+.maps-segment-actions button {
+    min-height: 42px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+}
+
 .mobile-route-actions button[hidden] {
     display: none;
 }
@@ -1182,6 +1201,16 @@ body.mobile-driver-mode .graph-error-banner {
 .mobile-back-btn {
     align-self: flex-start;
     min-width: 112px;
+}
+
+.mobile-sheet-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.mobile-sheet-actions button {
+    min-height: 44px;
 }
 
 .mobile-detail-header {
@@ -1269,6 +1298,10 @@ body.mobile-driver-mode .graph-error-banner {
     padding: 20px 0 6px;
 }
 
+#mobile-navigate-client-btn {
+    grid-column: 1 / -1;
+}
+
 .mobile-delivered-btn {
     background: #16834f;
     border-color: #16834f;
@@ -1280,4 +1313,49 @@ body.mobile-driver-mode .graph-error-banner {
     border-color: transparent;
     color: #fff;
     cursor: default;
+}
+
+.maps-segment-warning {
+    position: fixed;
+    inset: 0;
+    z-index: 1600;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(35, 24, 16, 0.48);
+    backdrop-filter: blur(3px);
+}
+
+.maps-segment-warning[hidden] {
+    display: none;
+}
+
+.maps-segment-warning-card {
+    width: min(100%, 460px);
+    padding: 24px 20px 20px;
+    border: 1px solid var(--pdt-border);
+    border-radius: 18px;
+    background: linear-gradient(180deg, #fffdf9 0%, #fff7ea 100%);
+    box-shadow: 0 18px 48px rgba(62, 42, 22, 0.3);
+}
+
+.maps-segment-warning-card h2 {
+    margin: 0 0 12px;
+    color: var(--pdt-brown-dark);
+    font-size: 1.28rem;
+}
+
+.maps-segment-warning-card p {
+    margin: 0;
+    color: var(--pdt-muted);
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.maps-segment-warning-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
 }
