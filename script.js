@@ -34,6 +34,18 @@ function resolveApiBase() {
 
 const API_BASE = resolveApiBase();
 
+function resolveAuthToken() {
+    const params = new URLSearchParams(window.location.search);
+    const queryToken = String(params.get("token") || "").trim();
+    if (queryToken) {
+        window.sessionStorage.setItem("VRP_AUTH_TOKEN", queryToken);
+        return queryToken;
+    }
+    return String(window.sessionStorage.getItem("VRP_AUTH_TOKEN") || "").trim();
+}
+
+const AUTH_TOKEN = resolveAuthToken();
+
 function resolveMainMenuUrl() {
     const params = new URLSearchParams(window.location.search);
     const returnTo = params.get("returnTo");
@@ -73,6 +85,13 @@ const state = {
     selectedNodeId: "",
     sourceMode: "backend",
     routes: [],
+    auth: {
+        loaded: false,
+        username: "",
+        role: "",
+        fullName: "",
+        vehiclePlate: ""
+    },
     totalClients: 0,
     totalAdjust: 0,
     adjustMode: "none",
@@ -251,6 +270,34 @@ function getRouteOptionLabel(item) {
     const name = item.displayName || item.routeName || item.route || "SIN RUTA";
     const count = Number(item.totalClients || 0);
     return `${name} (${count})`;
+}
+
+function isConductorSession() {
+    return String(state.auth.role || "").trim().toLowerCase() === "conductor";
+}
+
+function syncAccessUi() {
+    const adjustCard = document.querySelector('[data-go-page="adjust"]')?.closest(".menu-section");
+    if (adjustCard) adjustCard.style.display = isConductorSession() ? "none" : "";
+    const graphButton = document.querySelector('[data-go-page="graph"]');
+    if (graphButton && isConductorSession()) graphButton.textContent = "Abrir mis rutas";
+}
+
+async function loadSessionContext() {
+    try {
+        const payload = await fetchWithErrors(`${API_BASE}/session`);
+        const session = payload?.session || null;
+        state.auth = {
+            loaded: true,
+            username: String(session?.username || "").trim(),
+            role: String(session?.role || "").trim(),
+            fullName: String(session?.fullName || "").trim(),
+            vehiclePlate: String(session?.vehiclePlate || "").trim()
+        };
+    } catch (_) {
+        state.auth = { loaded: true, username: "", role: "", fullName: "", vehiclePlate: "" };
+    }
+    syncAccessUi();
 }
 
 function isMobileDriverDevice() {
@@ -503,6 +550,14 @@ async function apiSend(pathname, options) {
     );
 }
 
+function withAuthHeaders(options) {
+    const config = { ...(options || {}) };
+    const headers = { ...(config.headers || {}) };
+    if (AUTH_TOKEN) headers.Authorization = `Bearer ${AUTH_TOKEN}`;
+    config.headers = headers;
+    return config;
+}
+
 function showLoading() {
     if (!refs.loadingOverlay) return;
     refs.loadingTitle.textContent = "Cargando";
@@ -585,7 +640,7 @@ async function withLoading(task, copy) {
 }
 
 async function fetchWithErrors(url, options) {
-    const response = await fetch(url, options);
+    const response = await fetch(url, withAuthHeaders(options));
     if (!response.ok) {
         let message = `HTTP ${response.status}`;
         try {
@@ -2016,6 +2071,10 @@ function renderSummary() {
 }
 
 function changePage(nextPage) {
+    if (nextPage === "adjust" && isConductorSession()) {
+        setStatus("Tu usuario conductor solo tiene permiso para visualizar rutas.");
+        nextPage = "graph";
+    }
     state.currentPage = nextPage;
     refs.pages.forEach((page) => {
         page.classList.toggle("active", page.id === `page-${nextPage}`);
@@ -2273,11 +2332,12 @@ function bindEvents() {
     });
 }
 
-function init() {
+async function init() {
     applyMobileDriverMode();
     bindEvents();
     bindGraphInteractions();
     updateAdjustModeButtons();
+    await loadSessionContext();
     loadMapsConfig();
     loadInitialData();
     window.addEventListener("resize", applyMobileDriverMode);
