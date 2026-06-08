@@ -1032,26 +1032,59 @@ function renderMobileDetail(client) {
     if (refs.mobileDetailClient) {
         refs.mobileDetailClient.textContent = client.nombre_o_razon_social || client.name || client.clientId || "Cliente";
     }
-    const productRows = detail.length
-        ? detail.map((item) => `
-            <div class="mobile-product-row">
-                <span>${escapeHtml(getProductName(item))}</span>
-                <strong>${escapeHtml(getProductQuantity(item))}</strong>
+    if (client.partial) {
+        const partialDetail = Array.isArray(client.partialDetail) ? client.partialDetail : [];
+        const productRows = detail.length
+            ? detail.map((item) => {
+                const nombre = getProductName(item);
+                const esperado = getProductQuantity(item);
+                const found = partialDetail.find((p) => p.producto === nombre);
+                const entregado = found ? Number(found.cantidadEntregada || 0) : 0;
+                const isShort = entregado < esperado;
+                return `
+                    <div class="mobile-product-row">
+                        <span>${escapeHtml(nombre)}</span>
+                        <strong class="mobile-qty-partial ${isShort ? "is-short" : "is-complete"}">${entregado} / ${esperado}</strong>
+                    </div>
+                `;
+            }).join("")
+            : `<div class="mobile-empty-state">Sin productos registrados.</div>`;
+        const deliveredBaskets = getClientDeliveredBaskets(client) || 0;
+        const totalBaskets = getClientBaskets(client);
+        const basketsShort = deliveredBaskets < totalBaskets;
+        refs.mobileProductsList.innerHTML = `
+            <div class="mobile-product-row mobile-product-row--summary-header">
+                <span></span>
+                <strong>Entregado / Pedido</strong>
             </div>
-        `).join("")
-        : `<div class="mobile-empty-state">Sin productos registrados.</div>`;
-    const deliveredBaskets = getClientDeliveredBaskets(client);
-    refs.mobileProductsList.innerHTML = `
-        ${productRows}
-        <div class="mobile-product-row mobile-product-row--baskets">
-            <span>Cestas</span>
-            <label class="mobile-baskets-input-wrap">
-                <input id="mobile-delivered-baskets-input" type="text" inputmode="numeric" pattern="[0-9]*"
-                    autocomplete="off" required value="${escapeHtml(deliveredBaskets)}"
-                    aria-label="Cantidad de cestas entregadas" placeholder="${escapeHtml(getClientBaskets(client))}" />
-            </label>
-        </div>
-    `;
+            ${productRows}
+            <div class="mobile-product-row mobile-product-row--baskets">
+                <span>Cestas</span>
+                <strong class="mobile-qty-partial ${basketsShort ? "is-short" : "is-complete"}">${deliveredBaskets} / ${totalBaskets}</strong>
+            </div>
+        `;
+    } else {
+        const productRows = detail.length
+            ? detail.map((item) => `
+                <div class="mobile-product-row">
+                    <span>${escapeHtml(getProductName(item))}</span>
+                    <strong>${escapeHtml(getProductQuantity(item))}</strong>
+                </div>
+            `).join("")
+            : `<div class="mobile-empty-state">Sin productos registrados.</div>`;
+        const deliveredBaskets = getClientDeliveredBaskets(client);
+        refs.mobileProductsList.innerHTML = `
+            ${productRows}
+            <div class="mobile-product-row mobile-product-row--baskets">
+                <span>Cestas</span>
+                <label class="mobile-baskets-input-wrap">
+                    <input id="mobile-delivered-baskets-input" type="text" inputmode="numeric" pattern="[0-9]*"
+                        autocomplete="off" required value="${escapeHtml(deliveredBaskets)}"
+                        aria-label="Cantidad de cestas entregadas" placeholder="${escapeHtml(getClientBaskets(client))}" />
+                </label>
+            </div>
+        `;
+    }
     const alreadyDone = Boolean(client.delivered || client.partial);
     if (refs.mobileDeliveredBtn) {
         refs.mobileDeliveredBtn.disabled = alreadyDone;

@@ -1295,6 +1295,35 @@ body.mobile-driver-mode .graph-error-banner {
     text-transform: uppercase;
 }
 
+.mobile-product-row--summary-header {
+    min-height: 34px;
+    background: rgba(192, 110, 50, 0.06);
+    border-bottom: 1px solid rgba(192, 110, 50, 0.22);
+}
+
+.mobile-product-row--summary-header strong {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--pdt-muted, #6b5a4a);
+    justify-content: center;
+    border-left: 1px solid rgba(192, 110, 50, 0.22);
+}
+
+.mobile-qty-partial {
+    font-size: 0.82rem;
+    justify-content: center;
+    border-left: 1px solid rgba(192, 110, 50, 0.22);
+}
+
+.mobile-qty-partial.is-short {
+    color: #b45309;
+}
+
+.mobile-qty-partial.is-complete {
+    color: #16834f;
+}
+
 .mobile-detail-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
