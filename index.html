@@ -284,12 +284,24 @@
             </header>
             <div id="mobile-products-list" class="mobile-products-list"></div>
             <div class="mobile-detail-actions">
-                <button id="mobile-navigate-client-btn" type="button">Navegar a este cliente</button>
                 <button id="mobile-delivered-btn" class="mobile-delivered-btn" type="button">Entregado</button>
+                <button id="mobile-partial-btn" class="mobile-partial-btn" type="button">Entrega incompleta</button>
                 <button id="mobile-detail-back-btn" class="volver-menu" type="button">Volver</button>
             </div>
         </section>
     </main>
+
+    <div id="mobile-partial-modal" class="mobile-partial-modal" hidden>
+        <section class="mobile-partial-modal-card" role="dialog" aria-modal="true" aria-labelledby="mobile-partial-modal-title">
+            <h2 id="mobile-partial-modal-title">Entrega incompleta</h2>
+            <p class="mobile-partial-modal-subtitle">Indica cuánto se entregó de cada producto</p>
+            <div id="mobile-partial-products" class="mobile-partial-products"></div>
+            <div class="mobile-partial-actions">
+                <button id="mobile-partial-cancel-btn" class="volver-menu" type="button">Cancelar</button>
+                <button id="mobile-partial-confirm-btn" class="mobile-partial-confirm-btn" type="button">Confirmar</button>
+            </div>
+        </section>
+    </div>
 
     <div id="maps-segment-warning" class="maps-segment-warning" hidden>
         <section class="maps-segment-warning-card" role="dialog" aria-modal="true" aria-labelledby="maps-segment-warning-title">

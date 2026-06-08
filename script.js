@@ -190,7 +190,11 @@ const refs = {
     mobileSheetBackBtn: document.getElementById("mobile-sheet-back-btn"),
     mobileDetailBackBtn: document.getElementById("mobile-detail-back-btn"),
     mobileDeliveredBtn: document.getElementById("mobile-delivered-btn"),
-    mobileNavigateClientBtn: document.getElementById("mobile-navigate-client-btn"),
+    mobilePartialBtn: document.getElementById("mobile-partial-btn"),
+    mobilePartialModal: document.getElementById("mobile-partial-modal"),
+    mobilePartialProducts: document.getElementById("mobile-partial-products"),
+    mobilePartialCancelBtn: document.getElementById("mobile-partial-cancel-btn"),
+    mobilePartialConfirmBtn: document.getElementById("mobile-partial-confirm-btn"),
     mobileRoutePlate: document.getElementById("mobile-route-plate"),
     mobileRouteName: document.getElementById("mobile-route-name"),
     mobileSheetPlate: document.getElementById("mobile-sheet-plate"),
@@ -1003,18 +1007,21 @@ function renderMobileSheet() {
     }
     refs.mobileClientList.innerHTML = state.mobile.clients.map((client) => {
         const delivered = Boolean(client.delivered);
+        const partial = Boolean(client.partial);
+        const badgeClass = delivered ? "is-delivered" : partial ? "is-partial" : "is-pending";
+        const badgeText = delivered ? "Entregado" : partial ? "Incompleta" : "Por entregar";
         return `
             <button class="mobile-client-row" type="button" data-mobile-client="${encodeURIComponent(client.key)}">
                 <span>${escapeHtml(client.nombre_o_razon_social || client.name || client.clientId || "Cliente")}</span>
-                <strong class="mobile-delivery-badge ${delivered ? "is-delivered" : "is-pending"}">
-                    ${delivered ? "Entregado" : "Por entregar"}
+                <strong class="mobile-delivery-badge ${badgeClass}">
+                    ${badgeText}
                 </strong>
             </button>
         `;
     }).join("");
     if (refs.mobileNavigateNextBtn) {
         refs.mobileNavigateNextBtn.disabled = !state.mobile.clients.some((client) =>
-            !client.delivered && String(client.address || "").trim()
+            !client.delivered && !client.partial && String(client.address || "").trim()
         );
     }
 }
@@ -1045,12 +1052,13 @@ function renderMobileDetail(client) {
             </label>
         </div>
     `;
+    const alreadyDone = Boolean(client.delivered || client.partial);
     if (refs.mobileDeliveredBtn) {
-        refs.mobileDeliveredBtn.disabled = Boolean(client.delivered);
+        refs.mobileDeliveredBtn.disabled = alreadyDone;
         refs.mobileDeliveredBtn.textContent = "Entregado";
     }
-    if (refs.mobileNavigateClientBtn) {
-        refs.mobileNavigateClientBtn.disabled = !String(client.address || "").trim();
+    if (refs.mobilePartialBtn) {
+        refs.mobilePartialBtn.disabled = alreadyDone;
     }
 }
 
@@ -1101,6 +1109,110 @@ async function markMobileDeliveryCompleted() {
         showMobileView("sheet");
     } catch (error) {
         setStatus(`No se pudo guardar la entrega: ${error.message}`);
+    }
+}
+
+function openPartialDeliveryModal() {
+    const key = state.mobile.selectedClientKey;
+    const client = state.mobile.clients.find((item) => item.key === key);
+    if (!client || client.delivered || client.partial) return;
+    const detail = Array.isArray(client.detail) ? client.detail : [];
+    if (!refs.mobilePartialProducts || !refs.mobilePartialModal) return;
+
+    const productRows = detail.map((item, index) => `
+        <div class="mobile-partial-row">
+            <span>${escapeHtml(getProductName(item))}</span>
+            <div class="mobile-partial-input-wrap">
+                <input
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="off"
+                    data-partial-index="${index}"
+                    data-expected="${escapeHtml(getProductQuantity(item))}"
+                    placeholder="${escapeHtml(getProductQuantity(item))}"
+                    aria-label="Cantidad entregada de ${escapeHtml(getProductName(item))}"
+                />
+            </div>
+        </div>
+    `).join("");
+
+    const deliveredBaskets = getClientDeliveredBaskets(client);
+    const basketsRow = `
+        <div class="mobile-partial-row mobile-partial-row--baskets">
+            <span>Cestas</span>
+            <div class="mobile-partial-input-wrap">
+                <input
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="off"
+                    id="mobile-partial-baskets-input"
+                    value="${escapeHtml(deliveredBaskets)}"
+                    placeholder="${escapeHtml(getClientBaskets(client))}"
+                    aria-label="Cantidad de cestas entregadas"
+                />
+            </div>
+        </div>
+    `;
+
+    refs.mobilePartialProducts.innerHTML = productRows + basketsRow;
+    refs.mobilePartialModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    const firstInput = refs.mobilePartialProducts.querySelector("input");
+    if (firstInput) firstInput.focus();
+}
+
+function closePartialDeliveryModal() {
+    if (refs.mobilePartialModal) refs.mobilePartialModal.hidden = true;
+    document.body.style.overflow = "";
+}
+
+async function submitPartialDelivery() {
+    const key = state.mobile.selectedClientKey;
+    const client = state.mobile.clients.find((item) => item.key === key);
+    if (!client) return;
+    const detail = Array.isArray(client.detail) ? client.detail : [];
+
+    const inputs = refs.mobilePartialProducts.querySelectorAll("[data-partial-index]");
+    const partialDetail = Array.from(inputs).map((input) => {
+        const index = Number(input.dataset.partialIndex);
+        const item = detail[index] || {};
+        return {
+            producto: getProductName(item),
+            cantidadEsperada: getProductQuantity(item),
+            cantidadEntregada: Math.max(0, Math.trunc(toNumber(sanitizeNumericValue(input.value), 0)))
+        };
+    });
+
+    const basketsInput = document.getElementById("mobile-partial-baskets-input");
+    const basketsText = sanitizeNumericValue(basketsInput?.value);
+    if (!basketsText) {
+        basketsInput?.focus();
+        setStatus("Indica la cantidad de cestas entregadas.");
+        return;
+    }
+    const deliveredBaskets = Math.max(0, Math.trunc(toNumber(basketsText, 0)));
+
+    try {
+        await apiSend(`/deliveries/${encodeURIComponent(key)}`, {
+            method: "PUT",
+            body: JSON.stringify({ delivered: false, partial: true, partialDetail, deliveredBaskets })
+        });
+        const applyPartial = (item) => item.key === key
+            ? { ...item, partial: true, partialDetail, deliveredBaskets }
+            : item;
+        state.mobile.clients = state.mobile.clients.map(applyPartial);
+        state.nodes = state.nodes.map(applyPartial);
+        if (state.optimizedRoute?.sequence) {
+            state.optimizedRoute.sequence = state.optimizedRoute.sequence.map(applyPartial);
+        }
+        closePartialDeliveryModal();
+        renderMobileSheet();
+        renderGraph();
+        showMobileView("sheet");
+    } catch (error) {
+        setStatus(`No se pudo guardar la entrega incompleta: ${error.message}`);
     }
 }
 
@@ -2227,7 +2339,10 @@ function bindEvents() {
     bindIfExists(refs.mobileSheetBackBtn, "click", () => showMobileView("route"));
     bindIfExists(refs.mobileDetailBackBtn, "click", () => showMobileView("sheet"));
     bindIfExists(refs.mobileDeliveredBtn, "click", markMobileDeliveryCompleted);
-    bindIfExists(refs.mobileNavigateClientBtn, "click", navigateToSelectedMobileClient);
+    bindIfExists(refs.mobilePartialBtn, "click", openPartialDeliveryModal);
+    bindIfExists(refs.mobilePartialCancelBtn, "click", closePartialDeliveryModal);
+    bindIfExists(refs.mobilePartialConfirmBtn, "click", submitPartialDelivery);
+    bindIfExists(refs.mobilePartialModal, "click", (e) => { if (e.target === refs.mobilePartialModal) closePartialDeliveryModal(); });
     bindIfExists(refs.mobileNavigateNextBtn, "click", navigateToNextMobileClient);
     bindIfExists(refs.mapsSegmentWarningCancel, "click", closeMapsSegmentWarning);
     bindIfExists(refs.mapsSegmentWarningConfirm, "click", () => openGoogleMapsSegment(0));
