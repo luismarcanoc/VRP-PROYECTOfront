@@ -1343,6 +1343,10 @@ body.mobile-driver-mode .graph-error-banner {
     backdrop-filter: blur(3px);
 }
 
+.mobile-partial-modal[hidden] {
+    display: none;
+}
+
 .mobile-partial-modal-card {
     background: var(--pdt-surface-strong, #fffefa);
     border-radius: 22px;
